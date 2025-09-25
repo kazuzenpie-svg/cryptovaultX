@@ -5,8 +5,10 @@ import { useAuth } from './useAuth';
 
 export interface PortfolioMetrics {
   totalValue: number;
-  totalPnL: number;
+  totalPnL: number; // realized + unrealized
   totalPnLPercentage: number;
+  realizedPnL: number;
+  unrealizedPnL: number;
   dayPnL: number;
   weekPnL: number;
   monthPnL: number;
@@ -22,7 +24,7 @@ export interface PortfolioMetrics {
 export function usePortfolioMetrics() {
   const { user } = useAuth();
   const { entries, loading: entriesLoading } = useCombinedEntries();
-  const { getAssetPrice, lastUpdated } = useCryptoPrices();
+  const { getAssetPrice, getAssetChange, lastUpdated } = useCryptoPrices();
   const [loading, setLoading] = useState(true);
 
   const metrics = useMemo((): PortfolioMetrics => {
@@ -31,6 +33,8 @@ export function usePortfolioMetrics() {
         totalValue: 0,
         totalPnL: 0,
         totalPnLPercentage: 0,
+        realizedPnL: 0,
+        unrealizedPnL: 0,
         dayPnL: 0,
         weekPnL: 0,
         monthPnL: 0,
@@ -84,6 +88,7 @@ export function usePortfolioMetrics() {
     // Calculate current portfolio value
     let totalValue = 0;
     let totalCostBasis = 0;
+    let unrealizedPnL = 0;
     
     holdings.forEach((holding, asset) => {
       if (holding.quantity > 0) {
@@ -93,11 +98,26 @@ export function usePortfolioMetrics() {
         
         totalValue += currentValue;
         totalCostBasis += costBasis;
+        unrealizedPnL += currentValue - costBasis;
       }
     });
 
-    const totalPnL = totalValue - totalCostBasis;
-    const totalPnLPercentage = totalCostBasis > 0 ? (totalPnL / totalCostBasis) * 100 : 0;
+    // Realized PnL from entries
+    const realizedPnL = entries.reduce((sum, e) => sum + (e.pnl || 0), 0);
+
+    // Total PnL = realized + unrealized
+    const totalPnL = realizedPnL + unrealizedPnL;
+
+    // Estimate invested capital as net spot cash flow to compute a percentage
+    const netInvested = entries.reduce((sum, e) => {
+      if (e.type === 'spot' && e.quantity && e.price_usd) {
+        const flow = e.quantity * e.price_usd * (e.side === 'buy' ? 1 : -1);
+        return sum + flow;
+      }
+      return sum;
+    }, 0);
+    const denom = Math.max(Math.abs(netInvested), totalCostBasis, 1);
+    const totalPnLPercentage = denom > 0 ? (totalPnL / denom) * 100 : 0;
 
     // Calculate time-based P&L
     const now = new Date();
@@ -105,17 +125,21 @@ export function usePortfolioMetrics() {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const dayPnL = entries
+    // Day PnL = realized entries in last 24h + approximation of unrealized using 24h price change
+    const realizedDay = entries
       .filter(e => new Date(e.date) >= dayAgo)
-      .reduce((sum, e) => sum + e.pnl, 0);
+      .reduce((sum, e) => sum + (e.pnl || 0), 0);
+    const unrealizedDay = Array.from(holdings.entries())
+      .reduce((sum, [asset, holding]) => sum + ((getAssetChange(asset) || 0) * holding.quantity), 0);
+    const dayPnL = realizedDay + unrealizedDay;
 
+    // Week/Month PnL = realized within window (no historical price available for unrealized change)
     const weekPnL = entries
       .filter(e => new Date(e.date) >= weekAgo)
-      .reduce((sum, e) => sum + e.pnl, 0);
-
+      .reduce((sum, e) => sum + (e.pnl || 0), 0);
     const monthPnL = entries
       .filter(e => new Date(e.date) >= monthAgo)
-      .reduce((sum, e) => sum + e.pnl, 0);
+      .reduce((sum, e) => sum + (e.pnl || 0), 0);
 
     // Calculate trading metrics
     const trades = entries.filter(e => e.type === 'spot' || e.type === 'futures');
@@ -153,6 +177,8 @@ export function usePortfolioMetrics() {
       totalValue,
       totalPnL,
       totalPnLPercentage,
+      realizedPnL,
+      unrealizedPnL,
       dayPnL,
       weekPnL,
       monthPnL,

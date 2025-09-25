@@ -164,12 +164,15 @@ export function PnLCalendar() {
                 {hasActivity && (
                   <div className="absolute bottom-0 left-0 right-0 text-center">
                     <div className={`text-xs font-bold ${
-                      day.pnl > 0 ? 'text-success' : day.pnl < 0 ? 'text-destructive' : 'text-muted-foreground'
+                      day.pnl > 0
+                        ? 'text-success'
+                        : day.pnl < 0
+                        ? 'text-destructive'
+                        : 'text-muted-foreground'
                     }`}>
-                      {day.pnl > 0 ? '+' : ''}{Math.abs(day.pnl) >= 1000 
-                        ? `${(day.pnl / 1000).toFixed(1)}k` 
-                        : day.pnl.toFixed(0)
-                      }
+                      {day.pnl > 0 ? '+$' : '-$'}{Math.abs(day.pnl) >= 1000
+                        ? `${(Math.abs(day.pnl) / 1000).toFixed(1)}k`
+                        : Math.abs(day.pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
                   </div>
                 )}

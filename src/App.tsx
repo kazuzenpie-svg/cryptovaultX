@@ -16,11 +16,6 @@ import Sharing from "./pages/Sharing";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
-// Import debug utilities in development
-if (import.meta.env.DEV) {
-  import("@/lib/debugUtils");
-}
-
 const queryClient = new QueryClient();
 
 const App = () => (

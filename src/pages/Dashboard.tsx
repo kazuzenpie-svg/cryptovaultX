@@ -11,7 +11,6 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { Navbar } from '@/components/navigation/Navbar';
-import { DemoDataNotice } from '@/components/ui/demo-notice';
 import { ApiRateLimitStatus } from '@/components/ui/api-rate-limit-status';
 import { formatDistanceToNow } from 'date-fns';
 import { 
@@ -20,13 +19,14 @@ import {
   BarChart3, 
   DollarSign
 } from 'lucide-react';
+import { useLivePrices } from '@/hooks/useLivePrices';
 
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const { metrics, loading: metricsLoading } = usePortfolioMetrics();
   const { entries } = useCombinedEntries();
-  const { lastUpdated, lastApiCall, getTimeUntilNextCall, canMakeApiCall, fetchSimplePrices } = useCryptoPrices();
+  const { lastUpdated, lastApiCall, getTimeUntilNextCall, canMakeApiCall, fetchSimplePrices, getAssetPrice, getAssetChangePct } = useCryptoPrices();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,6 +47,13 @@ export default function Dashboard() {
       }
     }
   }, [entries, canMakeApiCall, fetchSimplePrices]);
+
+  // Live prices via Binance WS with REST fallback
+  const watchedSymbols = [...new Set(entries
+    .filter(e => e.type === 'spot' || e.type === 'wallet')
+    .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,'') )
+  )];
+  const { getPrice: getLivePrice } = useLivePrices(watchedSymbols);
 
   if (loading || metricsLoading) {
     return <PageLoading text="Loading your dashboard..." />;
@@ -100,9 +107,6 @@ export default function Dashboard() {
       <Navbar />
       <div className="min-h-screen p-2 sm:p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
-          {/* Demo Data Notice */}
-          <DemoDataNotice />
-          
           {/* API Status Information */}
           <div className="fade-in">
             <ApiRateLimitStatus 
@@ -149,6 +153,43 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Current Prices for Held Assets */}
+            {entries.length > 0 && (
+              <div className="fade-in" style={{ animationDelay: '0.55s' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg sm:text-xl font-semibold">Current Prices</h3>
+                  <span className="text-xs text-muted-foreground">USD (USDT)</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+                  {Array.from(new Set(
+                    entries
+                      .filter(e => e.type === 'spot' || e.type === 'wallet')
+                      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,'') )
+                  )).map((symbol) => {
+                    const live = getLivePrice(symbol);
+                    const price = (typeof live === 'number') ? live : getAssetPrice(symbol);
+                    const changePct = getAssetChangePct(symbol);
+                    const changeColor = typeof changePct === 'number'
+                      ? (changePct >= 0 ? 'text-green-500' : 'text-red-500')
+                      : 'text-muted-foreground';
+                    return (
+                      <div key={symbol} className="glass-card p-3 sm:p-4">
+                        <div className="flex items-baseline justify-between">
+                          <div className="font-medium">{symbol}</div>
+                          <div className={`text-xs ${changeColor}`}>
+                            {typeof changePct === 'number' ? `${changePct.toFixed(2)}%` : '—'}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-sm sm:text-base font-semibold">
+                          {typeof price === 'number' ? `$${price.toLocaleString()}` : '—'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Quick Actions and Recent Activity - Stacked on mobile */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <div className="fade-in" style={{ animationDelay: '0.6s' }}>
@@ -159,28 +200,12 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Coming Soon Section - Compact on mobile */}
-            <div className="text-center py-6 sm:py-8 lg:py-12 fade-in" style={{ animationDelay: '0.8s' }}>
-              <div className="glass-card p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
-                <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  More Features Coming Soon! 🚀
-                </h3>
-                <p className="text-muted-foreground mb-4 sm:mb-6 text-sm sm:text-base">
-                  We're working hard to bring you advanced portfolio analytics, automated price tracking, 
-                  sharing features, and much more. Stay tuned!
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {['Real-time Prices', 'Advanced Charts', 'CSV Import', 'Mobile App', 'API Access'].map((feature, index) => (
-                    <span 
-                      key={index}
-                      className="px-2 sm:px-3 py-1 bg-primary/20 text-primary rounded-full text-xs sm:text-sm"
-                    >
-                      {feature}
-                    </span>
-                  ))}
-                </div>
+            {/* Footer Credit */}
+            <footer className="text-center py-8">
+              <div className="text-xs sm:text-sm text-muted-foreground">
+                © {new Date().getFullYear()} <span className="font-semibold">kent asna</span> — Software Dev
               </div>
-            </div>
+            </footer>
           </div>
         </div>
       </div>

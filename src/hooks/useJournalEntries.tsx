@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { cacheGet, cacheSet } from '@/lib/cache';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
@@ -33,6 +34,7 @@ export function useJournalEntries() {
   const { toast } = useToast();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   const fetchEntries = async (limit?: number) => {
     if (!user) return;
@@ -57,7 +59,10 @@ export function useJournalEntries() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setEntries(data || []);
+      const list = data || [];
+      setEntries(list);
+      // cache per-user
+      cacheSet(`journal.${user.id}.entries`, list, CACHE_TTL);
     } catch (error: any) {
       console.error('Error fetching journal entries:', error);
       toast({
@@ -90,7 +95,11 @@ export function useJournalEntries() {
 
       if (error) throw error;
 
-      setEntries(prev => [data, ...prev]);
+      setEntries(prev => {
+        const next = [data, ...prev];
+        cacheSet(`journal.${user.id}.entries`, next, CACHE_TTL);
+        return next;
+      });
       
       toast({
         title: "Entry added! 📝",
@@ -127,9 +136,11 @@ export function useJournalEntries() {
 
       if (error) throw error;
 
-      setEntries(prev => prev.map(entry => 
-        entry.id === id ? data : entry
-      ));
+      setEntries(prev => {
+        const next = prev.map(entry => (entry.id === id ? data : entry));
+        cacheSet(`journal.${user.id}.entries`, next, CACHE_TTL);
+        return next;
+      });
 
       toast({
         title: "Entry updated! ✨",
@@ -164,7 +175,11 @@ export function useJournalEntries() {
 
       if (error) throw error;
 
-      setEntries(prev => prev.filter(entry => entry.id !== id));
+      setEntries(prev => {
+        const next = prev.filter(entry => entry.id !== id);
+        cacheSet(`journal.${user.id}.entries`, next, CACHE_TTL);
+        return next;
+      });
 
       toast({
         title: "Entry deleted! 🗑️",
@@ -185,6 +200,16 @@ export function useJournalEntries() {
       setLoading(false);
     }
   };
+
+  // Hydrate from cache immediately for current user
+  useEffect(() => {
+    if (!user) return;
+    const cached = cacheGet<JournalEntry[]>(`journal.${user.id}.entries`);
+    if (cached && Array.isArray(cached)) {
+      setEntries(cached);
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (user) {

@@ -112,7 +112,7 @@ const Journal = () => {
                   <Input
                     placeholder="Search by asset, notes, or type..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => setSearchTerm(e.currentTarget.value)}
                     className="pl-10"
                     data-testid="input-search"
                   />

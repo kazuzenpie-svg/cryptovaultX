@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { cacheGet, cacheSet } from '@/lib/cache';
 import { useToast } from './use-toast';
 
 export interface CryptoPrice {
@@ -14,8 +15,8 @@ export interface CryptoPrice {
 
 export interface SimpleCryptoPrice {
   [key: string]: {
-    usd: number;
-    usd_24h_change?: number;
+    usdt: number;
+    usdt_24h_change?: number;
   };
 }
 
@@ -60,7 +61,18 @@ const CRYPTO_ID_MAP: { [key: string]: string } = {
   'USDT': 'tether',
   'USDC': 'usd-coin',
   'BUSD': 'binance-usd',
-  'DAI': 'dai'
+  'DAI': 'dai',
+  // Extended common IDs to reduce unknowns
+  'ARB': 'arbitrum',
+  'OP': 'optimism',
+  'TIA': 'celestia',
+  'SUI': 'sui',
+  'APT': 'aptos',
+  'SEI': 'sei-network',
+  'WLD': 'worldcoin-wld',
+  'DYDX': 'dydx',
+  'HBAR': 'hedera-hashgraph',
+  'OM': 'mantra'
 };
 
 export function useCryptoPrices() {
@@ -73,6 +85,28 @@ export function useCryptoPrices() {
 
   // Cache duration: 1 hour (3600000 ms)
   const CACHE_DURATION = 60 * 60 * 1000;
+
+  // Keys for cache
+  const CACHE_KEYS = {
+    simple: 'prices.simple',
+    detailed: 'prices.detailed',
+    lastUpdated: 'prices.lastUpdated',
+    lastApiCall: 'prices.lastApiCall'
+  } as const;
+
+  // Hydrate from cache on mount
+  useEffect(() => {
+    try {
+      const cachedSimple = cacheGet<Record<string, { usdt: number; usdt_24h_change?: number }>>(CACHE_KEYS.simple);
+      if (cachedSimple) setPrices(cachedSimple);
+      const cachedDetailed = cacheGet<CryptoPrice[]>(CACHE_KEYS.detailed);
+      if (cachedDetailed && Array.isArray(cachedDetailed)) setDetailedPrices(cachedDetailed);
+      const cachedUpdated = cacheGet<number>(CACHE_KEYS.lastUpdated);
+      if (typeof cachedUpdated === 'number') setLastUpdated(new Date(cachedUpdated));
+      const cachedCall = cacheGet<number>(CACHE_KEYS.lastApiCall);
+      if (typeof cachedCall === 'number') setLastApiCall(new Date(cachedCall));
+    } catch {}
+  }, []);
 
   // Check if we can make an API call (respecting 1-hour rate limit)
   const canMakeApiCall = () => {
@@ -91,7 +125,41 @@ export function useCryptoPrices() {
   // Convert asset symbols to CoinGecko IDs
   const getCoingeckoId = useCallback((symbol: string): string => {
     const upperSymbol = symbol.toUpperCase().replace(/\/USDT$|\/USD$/, '');
-    return CRYPTO_ID_MAP[upperSymbol] || symbol.toLowerCase();
+    const mapped = CRYPTO_ID_MAP[upperSymbol];
+    return mapped ? mapped : '';
+  }, []);
+
+  // Proxy rotation to mitigate CORS hiccups
+  const PROXIES = [
+    (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://r.jina.ai/http://r.jina.ai/http://` + url.replace(/^https?:\/\//, ''),
+    (url: string) => `https://cors.isomorphic-git.org/${url}`,
+  ];
+
+  const fetchViaProxies = useCallback(async (url: string): Promise<any | null> => {
+    for (const make of PROXIES) {
+      try {
+        const proxyUrl = make(url);
+        const res = await fetch(proxyUrl);
+        if (!res.ok) continue;
+        // allorigins returns { contents }, others return raw JSON
+        const txt = await res.text();
+        try {
+          const parsed = JSON.parse(txt);
+          if (parsed && parsed.contents) {
+            return JSON.parse(parsed.contents);
+          }
+          return parsed; // already JSON
+        } catch {
+          // try parse text as JSON (for raw proxy)
+          try { return JSON.parse(txt); } catch { return null; }
+        }
+      } catch (e) {
+        // try next proxy
+        continue;
+      }
+    }
+    return null;
   }, []);
 
   // Fetch simple prices for multiple assets
@@ -115,38 +183,40 @@ export function useCryptoPrices() {
       console.log('🪙 CoinGecko CORS detected, using fallback price data');
       
       const fallbackPrices: SimpleCryptoPrice = {
-        'bitcoin': { usd: 43250, usd_24h_change: 2.5 },
-        'ethereum': { usd: 2650, usd_24h_change: 1.8 },
-        'binancecoin': { usd: 315, usd_24h_change: -0.5 },
-        'cardano': { usd: 0.48, usd_24h_change: 3.2 },
-        'solana': { usd: 98, usd_24h_change: 4.1 },
-        'ripple': { usd: 0.58, usd_24h_change: -1.2 },
-        'polkadot': { usd: 7.25, usd_24h_change: 0.8 },
-        'dogecoin': { usd: 0.085, usd_24h_change: 5.6 },
-        'avalanche-2': { usd: 38, usd_24h_change: 2.1 },
-        'matic-network': { usd: 0.92, usd_24h_change: 1.4 },
-        'litecoin': { usd: 72, usd_24h_change: -0.8 },
-        'chainlink': { usd: 14.5, usd_24h_change: 2.9 },
-        'usd-coin': { usd: 1.00, usd_24h_change: 0.0 },
-        'tether': { usd: 1.00, usd_24h_change: 0.0 }
+        'bitcoin': { usdt: 43250, usdt_24h_change: 2.5 },
+        'ethereum': { usdt: 2650, usdt_24h_change: 1.8 },
+        'binancecoin': { usdt: 315, usdt_24h_change: -0.5 },
+        'cardano': { usdt: 0.48, usdt_24h_change: 3.2 },
+        'solana': { usdt: 98, usdt_24h_change: 4.1 },
+        'ripple': { usdt: 0.58, usdt_24h_change: -1.2 },
+        'polkadot': { usdt: 7.25, usdt_24h_change: 0.8 },
+        'dogecoin': { usdt: 0.085, usdt_24h_change: 5.6 },
+        'avalanche-2': { usdt: 38, usdt_24h_change: 2.1 },
+        'matic-network': { usdt: 0.92, usdt_24h_change: 1.4 },
+        'litecoin': { usdt: 72, usdt_24h_change: -0.8 },
+        'chainlink': { usdt: 14.5, usdt_24h_change: 2.9 },
+        'usd-coin': { usdt: 1.00, usdt_24h_change: 0.0 },
+        'tether': { usdt: 1.00, usdt_24h_change: 0.0 }
       };
       
       // Try to fetch real data first, fall back to demo data if CORS blocks
       try {
-        const coingeckoIds = assets.map(getCoingeckoId).join(',');
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
-          `${COINGECKO_BASE_URL}/simple/price?ids=${coingeckoIds}&vs_currencies=usd&include_24hr_change=true`
-        )}`;
-        
-        const response = await fetch(proxyUrl);
-        
-        if (response.ok) {
-          const proxyData = await response.json();
-          const realData = JSON.parse(proxyData.contents);
-          console.log('✅ Successfully fetched real price data via proxy');
+        const ids = assets
+          .map(getCoingeckoId)
+          .filter(Boolean)
+          .join(',');
+        const url = `${COINGECKO_BASE_URL}/simple/price?ids=${ids}&vs_currencies=usdt&include_24hr_change=true`;
+        const realData = await fetchViaProxies(url);
+        if (realData) {
+          console.log('✅ Successfully fetched real price data via proxy rotation');
           setPrices(realData);
-          setLastUpdated(new Date());
-          setLastApiCall(new Date()); // Record successful API call
+          const now = new Date();
+          setLastUpdated(now);
+          setLastApiCall(now); // Record successful API call
+          // Cache
+          cacheSet(CACHE_KEYS.simple, realData, CACHE_DURATION);
+          cacheSet(CACHE_KEYS.lastUpdated, now.getTime(), CACHE_DURATION);
+          cacheSet(CACHE_KEYS.lastApiCall, now.getTime(), CACHE_DURATION);
           return realData;
         }
       } catch (proxyError) {
@@ -156,8 +226,12 @@ export function useCryptoPrices() {
       // Use fallback data
       console.log('📊 Using fallback price data for demo');
       setPrices(fallbackPrices);
-      setLastUpdated(new Date());
-      setLastApiCall(new Date()); // Record API attempt
+      const now = new Date();
+      setLastUpdated(now);
+      setLastApiCall(now); // Record API attempt
+      cacheSet(CACHE_KEYS.simple, fallbackPrices, CACHE_DURATION);
+      cacheSet(CACHE_KEYS.lastUpdated, now.getTime(), CACHE_DURATION);
+      cacheSet(CACHE_KEYS.lastApiCall, now.getTime(), CACHE_DURATION);
       return fallbackPrices;
       
     } catch (error: any) {
@@ -215,20 +289,21 @@ export function useCryptoPrices() {
       ];
       
       try {
-        const coingeckoIds = assets.map(getCoingeckoId).join(',');
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
-          `${COINGECKO_BASE_URL}/coins/markets?vs_currency=usd&ids=${coingeckoIds}&per_page=${limit}&page=1&sparkline=false&price_change_percentage=24h`
-        )}`;
-        
-        const response = await fetch(proxyUrl);
-        
-        if (response.ok) {
-          const proxyData = await response.json();
-          const realData = JSON.parse(proxyData.contents);
-          console.log('✅ Successfully fetched real market data via proxy');
+        const ids = assets
+          .map(getCoingeckoId)
+          .filter(Boolean)
+          .join(',');
+        const url = `${COINGECKO_BASE_URL}/coins/markets?vs_currency=usdt&ids=${ids}&per_page=${limit}&page=1&sparkline=false&price_change_percentage=24h`;
+        const realData = await fetchViaProxies(url);
+        if (realData) {
+          console.log('✅ Successfully fetched real market data via proxy rotation');
           setDetailedPrices(realData);
-          setLastUpdated(new Date());
-          setLastApiCall(new Date()); // Record successful API call
+          const now = new Date();
+          setLastUpdated(now);
+          setLastApiCall(now); // Record successful API call
+          cacheSet(CACHE_KEYS.detailed, realData, CACHE_DURATION);
+          cacheSet(CACHE_KEYS.lastUpdated, now.getTime(), CACHE_DURATION);
+          cacheSet(CACHE_KEYS.lastApiCall, now.getTime(), CACHE_DURATION);
           return realData;
         }
       } catch (proxyError) {
@@ -238,8 +313,12 @@ export function useCryptoPrices() {
       // Use fallback data
       console.log('📊 Using fallback market data for demo');
       setDetailedPrices(fallbackMarketData);
-      setLastUpdated(new Date());
-      setLastApiCall(new Date()); // Record API attempt
+      const now = new Date();
+      setLastUpdated(now);
+      setLastApiCall(now); // Record API attempt
+      cacheSet(CACHE_KEYS.detailed, fallbackMarketData, CACHE_DURATION);
+      cacheSet(CACHE_KEYS.lastUpdated, now.getTime(), CACHE_DURATION);
+      cacheSet(CACHE_KEYS.lastApiCall, now.getTime(), CACHE_DURATION);
       return fallbackMarketData;
       
     } catch (error: any) {
@@ -255,13 +334,25 @@ export function useCryptoPrices() {
   // Get price for a specific asset
   const getAssetPrice = useCallback((symbol: string): number | null => {
     const coingeckoId = getCoingeckoId(symbol);
-    return prices[coingeckoId]?.usd || null;
+    return prices[coingeckoId]?.usdt || null;
   }, [prices, getCoingeckoId]);
 
   // Get 24h change for a specific asset
+  const getAssetChangePct = useCallback((symbol: string): number | null => {
+    const coingeckoId = getCoingeckoId(symbol);
+    const pct = prices[coingeckoId]?.usdt_24h_change;
+    return typeof pct === 'number' ? pct : null;
+  }, [prices, getCoingeckoId]);
+
+  // Absolute 24h change in USD (price delta), derived from percent and current price
   const getAssetChange = useCallback((symbol: string): number | null => {
     const coingeckoId = getCoingeckoId(symbol);
-    return prices[coingeckoId]?.usd_24h_change || null;
+    const price = prices[coingeckoId]?.usdt;
+    const pct = prices[coingeckoId]?.usdt_24h_change;
+    if (typeof price === 'number' && typeof pct === 'number') {
+      return (price * pct) / 100;
+    }
+    return null;
   }, [prices, getCoingeckoId]);
 
   // Auto-refresh prices every hour (respecting rate limit)
@@ -291,6 +382,7 @@ export function useCryptoPrices() {
     fetchMarketData,
     getAssetPrice,
     getAssetChange,
+    getAssetChangePct,
     getCoingeckoId,
     canMakeApiCall,
     getTimeUntilNextCall,

@@ -24,6 +24,8 @@ import {
   Database
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { AssetSummaryList } from '@/components/analytics/AssetSummaryList';
 
 export default function Analytics() {
   const { metrics, loading } = usePortfolioMetrics();
@@ -47,12 +49,12 @@ export default function Analytics() {
 
   // Calculate summary stats from entries
   const totalInflows = entries
-    .filter(e => e.pnl > 0 || (e.type === 'spot' && e.side === 'sell'))
-    .reduce((sum, e) => sum + Math.abs(e.pnl) + (e.quantity && e.price_usd && e.side === 'sell' ? e.quantity * e.price_usd : 0), 0);
-  
+    .filter(e => e.pnl > 0)
+    .reduce((sum, e) => sum + e.pnl, 0);
+
   const totalOutflows = entries
-    .filter(e => e.pnl < 0 || (e.type === 'spot' && e.side === 'buy'))
-    .reduce((sum, e) => sum + Math.abs(e.pnl) + (e.quantity && e.price_usd && e.side === 'buy' ? e.quantity * e.price_usd : 0), 0);
+    .filter(e => e.pnl < 0)
+    .reduce((sum, e) => sum + Math.abs(e.pnl), 0);
   
   const netFlow = totalInflows - totalOutflows;
 
@@ -130,24 +132,27 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Performance Overview */}
-          <div className="fade-in">
-            <PerformanceMetrics />
-          </div>
-
-          {/* P&L Calendar */}
-          <div className="fade-in" style={{ animationDelay: '0.1s' }}>
-            <PnLCalendar />
-          </div>
-
-          {/* Trading Heatmap */}
-          <div className="fade-in" style={{ animationDelay: '0.2s' }}>
-            <TradingHeatmap />
-          </div>
+          {/* Analytics Overview Tabs */}
+          <Tabs defaultValue="performance" className="fade-in space-y-4">
+            <TabsList className="grid grid-cols-3">
+              <TabsTrigger value="performance">Performance</TabsTrigger>
+              <TabsTrigger value="calendar">Calendar</TabsTrigger>
+              <TabsTrigger value="heatmap">Heatmap</TabsTrigger>
+            </TabsList>
+            <TabsContent value="performance" className="pt-4">
+              <PerformanceMetrics />
+            </TabsContent>
+            <TabsContent value="calendar" className="pt-4">
+              <PnLCalendar />
+            </TabsContent>
+            <TabsContent value="heatmap" className="pt-4">
+              <TradingHeatmap />
+            </TabsContent>
+          </Tabs>
 
           {/* Cashflow Summary - Mobile Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 fade-in" style={{ animationDelay: '0.3s' }}>
-            <Card className="glass-card fade-in">
+          <div className="fade-in overflow-x-auto md:grid-flow-col auto-cols-max grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 snap-x snap-mandatory" style={{ animationDelay: '0.3s' }}>
+            <Card className="glass-card flex-shrink-0 min-w-[260px] snap-start">
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -164,7 +169,7 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            <Card className="glass-card fade-in" style={{ animationDelay: '0.1s' }}>
+            <Card className="glass-card flex-shrink-0 min-w-[260px] snap-start" style={{ animationDelay: '0.1s' }}>
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -181,7 +186,7 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            <Card className="glass-card fade-in sm:col-span-2 lg:col-span-1" style={{ animationDelay: '0.2s' }}>
+            <Card className="glass-card flex-shrink-0 min-w-[260px] snap-start sm:col-span-2 lg:col-span-1" style={{ animationDelay: '0.2s' }}>
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -254,6 +259,9 @@ export default function Analytics() {
             </Card>
           )}
 
+          {/* Per-Asset Summaries */}
+          <AssetSummaryList />
+
           {/* Activity Breakdown */}
           <Card className="glass-card fade-in" style={{ animationDelay: '0.4s' }}>
             <CardHeader>
@@ -272,47 +280,40 @@ export default function Analytics() {
                   <p className="text-muted-foreground mb-6">
                     Add some journal entries to see your activity breakdown.
                   </p>
-                  <Button onClick={() => window.location.href = '/journal'} className="hover-scale">
-                    Add Journal Entry
-                  </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {Object.entries(typeBreakdown).map(([type, data], index) => {
-                    const netAmount = data.inflow - data.outflow;
-                    const typeLabel = entryTypeLabels[type as keyof typeof entryTypeLabels] || type;
-                    
-                    return (
-                      <div 
-                        key={type}
-                        className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/5 transition-colors fade-in"
-                        style={{ animationDelay: `${0.4 + index * 0.05}s` }}
-                      >
-                        <div className="flex items-center gap-4">
-                          <Badge variant="outline" className="capitalize">
-                            {typeLabel}
-                          </Badge>
-                          <div className="text-sm text-muted-foreground">
-                            {data.count} {data.count === 1 ? 'entry' : 'entries'}
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-6 text-sm">
-                          <div className="text-success">
-                            In: ${data.inflow.toLocaleString()}
-                          </div>
-                          <div className="text-destructive">
-                            Out: ${data.outflow.toLocaleString()}
-                          </div>
-                          <div className={`font-medium ${
-                            netAmount >= 0 ? 'text-success' : 'text-destructive'
-                          }`}>
-                            Net: {netAmount >= 0 ? '+' : ''}${netAmount.toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="py-2 pr-4">Type</th>
+                        <th className="py-2 pr-4 text-right">Entries</th>
+                        <th className="py-2 pr-4 text-right">In</th>
+                        <th className="py-2 pr-4 text-right">Out</th>
+                        <th className="py-2 pr-0 text-right">Net</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(typeBreakdown).map(([type, data], index) => {
+                        const netAmount = data.inflow - data.outflow;
+                        const typeLabel = entryTypeLabels[type as keyof typeof entryTypeLabels] || type;
+                        const netColor = netAmount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+                        return (
+                          <tr key={type} className="border-t">
+                            <td className="py-3 pr-4">
+                              <Badge variant="outline" className="capitalize">{typeLabel}</Badge>
+                            </td>
+                            <td className="py-3 pr-4 text-right tabular-nums">{data.count}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums text-success">${data.inflow.toLocaleString()}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums text-destructive">${data.outflow.toLocaleString()}</td>
+                            <td className={`py-3 pr-0 text-right tabular-nums font-medium ${netColor}`}>
+                              {netAmount >= 0 ? '+' : ''}${netAmount.toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </CardContent>

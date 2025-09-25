@@ -1,15 +1,16 @@
 
-import { useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { PageLoading } from '@/components/LoadingSpinner';
-import { Navbar } from '@/components/navigation/Navbar';
-import { DemoDataNotice } from '@/components/ui/demo-notice';
-import { usePortfolioMetrics } from '@/hooks/usePortfolioMetrics';
-import { useCombinedEntries } from '@/hooks/useCombinedEntries';
-import { useDataVisibility } from '@/hooks/useDataVisibility';
-import { useCryptoPrices } from '@/hooks/useCryptoPrices';
+import React, { useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { PageLoading } from '../components/LoadingSpinner';
+import { Navbar } from '../components/navigation/Navbar';
+import { DemoDataNotice } from '../components/ui/demo-notice';
+import { usePortfolioMetrics } from '../hooks/usePortfolioMetrics';
+import { useCombinedEntries } from '../hooks/useCombinedEntries';
+import { useDataVisibility } from '../hooks/useDataVisibility';
+import { useCryptoPrices } from '../hooks/useCryptoPrices';
+import { useNavigate } from 'react-router-dom';
 import { 
   PieChart, 
   TrendingUp, 
@@ -25,6 +26,7 @@ import {
 import { format } from 'date-fns';
 
 export default function Portfolio() {
+  const navigate = useNavigate();
   const { metrics, loading } = usePortfolioMetrics();
   const { entries, loading: entriesLoading } = useCombinedEntries();
   const { dataSources, getVisibleSources } = useDataVisibility();
@@ -32,7 +34,7 @@ export default function Portfolio() {
 
   const isLoading = loading || entriesLoading;
   const visibleSources = getVisibleSources();
-  const sharedEntries = entries.filter(e => e.isShared);
+  const sharedEntries = entries.filter((e: any) => e.isShared);
 
   // Calculate portfolio holdings
   const portfolio = useMemo(() => {
@@ -43,7 +45,7 @@ export default function Portfolio() {
       pnl: number;
     }>();
 
-    entries.forEach(entry => {
+    entries.forEach((entry: any) => {
       if (entry.type === 'spot' || entry.type === 'wallet') {
         const current = holdings.get(entry.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, pnl: 0 };
         
@@ -65,7 +67,6 @@ export default function Portfolio() {
           current.quantity += entry.quantity;
         }
         
-        current.pnl += entry.pnl;
         holdings.set(entry.asset, current);
       }
     });
@@ -82,7 +83,7 @@ export default function Portfolio() {
           avg_entry_price: holding.avgPrice,
           current_price_usd: currentPrice,
           current_value_usd: currentValue,
-          total_pnl: holding.pnl,
+          total_pnl: currentValue - holding.totalCost,
           price_last_updated: lastUpdated?.toISOString() || new Date().toISOString()
         };
       })
@@ -139,20 +140,20 @@ export default function Portfolio() {
               )}
             </div>
             
-            <Button onClick={() => updatePortfolioWithLivePrices()} variant="outline" className="hover-scale">
+            <Button onClick={() => updatePortfolioWithLivePrices()} variant="outline" className="w-full sm:w-auto hover-scale">
               <RefreshCw className="w-4 h-4 mr-2" />
               Update Prices
             </Button>
           </div>
 
-          {/* Portfolio Stats - Mobile Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+          {/* Portfolio Stats - Responsive Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
             <Card className="glass-card fade-in">
               <CardContent className="p-4 md:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total Value</p>
-                    <div className="text-lg sm:text-2xl font-bold">
+                    <div className="text-lg sm:text-2xl font-bold tabular-nums">
                       ${metrics.totalValue.toLocaleString()}
                     </div>
                   </div>
@@ -168,7 +169,7 @@ export default function Portfolio() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total P&L</p>
-                    <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 ${
+                    <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 tabular-nums ${
                       metrics.totalPnL >= 0 ? 'text-success' : 'text-destructive'
                     }`}>
                       {metrics.totalPnL >= 0 ? (
@@ -195,7 +196,7 @@ export default function Portfolio() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">P&L %</p>
-                    <div className={`text-lg sm:text-2xl font-bold ${
+                    <div className={`text-lg sm:text-2xl font-bold tabular-nums ${
                       metrics.totalPnLPercentage >= 0 ? 'text-success' : 'text-destructive'
                     }`}>
                       <span className="text-sm sm:text-base">{metrics.totalPnLPercentage >= 0 ? '+' : ''}{metrics.totalPnLPercentage.toFixed(2)}%</span>
@@ -217,10 +218,62 @@ export default function Portfolio() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">Assets</p>
-                    <div className="text-lg sm:text-2xl font-bold">{metrics.assetCount}</div>
+                    <div className="text-lg sm:text-2xl font-bold tabular-nums">{metrics.assetCount}</div>
                   </div>
                   <div className="w-8 h-8 sm:w-12 sm:h-12 bg-accent/20 rounded-lg flex items-center justify-center self-end sm:self-auto">
                     <Eye className="w-4 h-4 sm:w-6 sm:h-6 text-accent" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Realized P&L */}
+            <Card className="glass-card fade-in" style={{ animationDelay: '0.35s' }}>
+              <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                  <div className="mb-2 sm:mb-0">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground">Realized P&L</p>
+                    <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 tabular-nums ${
+                      metrics.realizedPnL >= 0 ? 'text-success' : 'text-destructive'
+                    }`}>
+                      {metrics.realizedPnL >= 0 ? (
+                        <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                      )}
+                      <span className="text-sm sm:text-base">{metrics.realizedPnL >= 0 ? '+' : ''}${metrics.realizedPnL.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center self-end sm:self-auto ${
+                    metrics.realizedPnL >= 0 ? 'bg-success/20' : 'bg-destructive/20'
+                  }`}>
+                    <DollarSign className={`${metrics.realizedPnL >= 0 ? 'text-success' : 'text-destructive'} w-4 h-4 sm:w-6 sm:h-6`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Unrealized P&L */}
+            <Card className="glass-card fade-in" style={{ animationDelay: '0.4s' }}>
+              <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                  <div className="mb-2 sm:mb-0">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground">Unrealized P&L</p>
+                    <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 tabular-nums ${
+                      metrics.unrealizedPnL >= 0 ? 'text-success' : 'text-destructive'
+                    }`}>
+                      {metrics.unrealizedPnL >= 0 ? (
+                        <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                      )}
+                      <span className="text-sm sm:text-base">{metrics.unrealizedPnL >= 0 ? '+' : ''}${metrics.unrealizedPnL.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center self-end sm:self-auto ${
+                    metrics.unrealizedPnL >= 0 ? 'bg-success/20' : 'bg-destructive/20'
+                  }`}>
+                    <BarChart3 className={`${metrics.unrealizedPnL >= 0 ? 'text-success' : 'text-destructive'} w-4 h-4 sm:w-6 sm:h-6`} />
                   </div>
                 </div>
               </CardContent>
@@ -238,7 +291,7 @@ export default function Portfolio() {
                 <p className="text-muted-foreground text-center mb-6 max-w-md">
                   Your portfolio is empty. Start by adding some journal entries to track your crypto activities.
                 </p>
-                <Button onClick={() => window.location.href = '/journal'} className="hover-scale">
+                <Button onClick={() => navigate('/journal')} className="hover-scale">
                   Add Journal Entry
                 </Button>
               </CardContent>
@@ -252,7 +305,7 @@ export default function Portfolio() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {portfolio.map((asset, index) => {
                     const pnlPercentage = asset.avg_entry_price > 0 
                       ? ((asset.current_price_usd - asset.avg_entry_price) / asset.avg_entry_price) * 100 
@@ -261,33 +314,32 @@ export default function Portfolio() {
                     return (
                       <div 
                         key={asset.asset} 
-                        className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/5 transition-colors fade-in"
+                        className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-lg border hover:bg-accent/5 transition-colors fade-in"
                         style={{ animationDelay: `${0.5 + index * 0.05}s` }}
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
                           <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center">
                             <span className="text-white font-bold text-sm">
                               {asset.asset.substring(0, 3).toUpperCase()}
                             </span>
                           </div>
-                          
-                          <div>
-                            <h3 className="font-semibold text-lg">{asset.asset}</h3>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>{asset.total_quantity?.toLocaleString()} tokens</span>
-                              <span>Avg: ${asset.avg_entry_price?.toLocaleString()}</span>
-                              <span>Current: ${asset.current_price_usd?.toLocaleString()}</span>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-lg truncate max-w-[180px] sm:max-w-[220px]">{asset.asset}</h3>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+                              <span className="tabular-nums">{asset.total_quantity?.toLocaleString()} tokens</span>
+                              <span className="tabular-nums">Avg: ${asset.avg_entry_price?.toLocaleString()}</span>
+                              <span className="tabular-nums">Current: ${asset.current_price_usd?.toLocaleString()}</span>
                             </div>
                           </div>
                         </div>
                         
-                        <div className="text-right">
-                          <div className="text-lg font-semibold">
+                        <div className="mt-4 sm:mt-0 w-full sm:w-auto text-right min-w-0">
+                          <div className="text-lg font-semibold tabular-nums">
                             ${asset.current_value_usd?.toLocaleString()}
                           </div>
                           
-                          <div className="flex items-center gap-4">
-                            <div className={`text-sm font-medium ${
+                          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
+                            <div className={`text-sm font-medium tabular-nums ${
                               asset.total_pnl >= 0 ? 'text-success' : 'text-destructive'
                             }`}>
                               {asset.total_pnl >= 0 ? '+' : ''}${asset.total_pnl?.toLocaleString()}

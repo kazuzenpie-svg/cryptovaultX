@@ -52,8 +52,8 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
       platform_id: initialData.platform_id || '',
       date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       asset: initialData.asset || '',
-      quantity: initialData.quantity || 0,
-      price_usd: initialData.price_usd || 0,
+      quantity: initialData.quantity && initialData.quantity > 0 ? initialData.quantity : undefined,
+      price_usd: initialData.price_usd && initialData.price_usd > 0 ? initialData.price_usd : undefined,
       fees: initialData.fees || 0,
       pnl: initialData.pnl || 0,
       side: initialData.side,
@@ -66,8 +66,9 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
       currency: 'USD',
       is_personal: false,
       date: new Date().toISOString().split('T')[0],
-      quantity: 0,
-      price_usd: 0,
+      // leave optional numeric fields undefined by default to avoid DB CHECK violations
+      quantity: undefined,
+      price_usd: undefined,
       fees: 0,
       pnl: 0,
       leverage: 1,
@@ -96,15 +97,20 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
       return;
     }
 
+    const toPositiveOrUndefined = (n?: number) => (typeof n === 'number' && n > 0 ? n : undefined);
+    const nonNegativeOrUndefined = (n?: number) => (typeof n === 'number' && n >= 0 ? n : undefined);
+
     const entryData = {
       type: data.type!,
       asset: data.asset,
       date: data.date,
       platform_id: data.platform_id,
-      quantity: data.quantity || 0,
-      price_usd: data.price_usd || 0,
-      fees: data.fees || 0,
-      pnl: data.pnl || 0,
+      // Quantity and price_usd are optional and must be > 0 if provided
+      quantity: toPositiveOrUndefined(data.quantity),
+      price_usd: toPositiveOrUndefined(data.price_usd),
+      // Fees can be 0; PnL can be 0
+      fees: nonNegativeOrUndefined(data.fees) ?? 0,
+      pnl: typeof data.pnl === 'number' ? data.pnl : 0,
       side: data.side,
       leverage: data.leverage,
       currency: data.currency || 'USD',
@@ -154,9 +160,9 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
                 id="quantity"
                 type="number"
                 step="any"
-                defaultValue="0"
+                min="0"
                 className="flex-1"
-                {...register('quantity', { valueAsNumber: true })}
+                {...register('quantity', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
               />
             </div>
             <div className="flex items-center gap-4">
@@ -165,9 +171,9 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
                 id="price_usd"
                 type="number"
                 step="any"
-                defaultValue="0"
+                min="0"
                 className="flex-1"
-                {...register('price_usd', { valueAsNumber: true })}
+                {...register('price_usd', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
               />
             </div>
           </>
@@ -197,9 +203,8 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
                 type="number"
                 min="1"
                 max="1000"
-                defaultValue="1"
                 className="flex-1"
-                {...register('leverage', { valueAsNumber: true })}
+                {...register('leverage', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
               />
               {errors.leverage && <p className="text-sm text-destructive ml-28">{errors.leverage.message}</p>}
             </div>
@@ -209,9 +214,8 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
                 id="pnl"
                 type="number"
                 step="any"
-                defaultValue="0"
                 className="flex-1"
-                {...register('pnl', { valueAsNumber: true })}
+                {...register('pnl', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
               />
             </div>
           </>
@@ -224,9 +228,9 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
               id="quantity"
               type="number"
               step="any"
-              defaultValue="0"
+              min="0"
               className="flex-1"
-              {...register('quantity', { valueAsNumber: true })}
+              {...register('quantity', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
             />
           </div>
         );
@@ -240,7 +244,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
               step="any"
               defaultValue="0"
               className="flex-1"
-              {...register('quantity', { valueAsNumber: true })}
+              {...register('quantity', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
             />
           </div>
         );
@@ -348,9 +352,9 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
                 id="fees"
                 type="number"
                 step="any"
-                defaultValue="0"
+                min="0"
                 className="flex-1"
-                {...register('fees', { valueAsNumber: true })}
+                {...register('fees', { setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)) })}
               />
             </div>
 
