@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cacheGet, cacheSet } from '@/lib/cache';
+import { useCryptoIcons } from '../CryptoIcon';
 
 interface AssetIconProps {
   symbol: string; // e.g., BTC
@@ -9,13 +10,17 @@ interface AssetIconProps {
 
 // Free icon CDN: https://github.com/spothq/cryptocurrency-icons
 // We use jsdelivr to pull the colored SVG by ticker symbol when available
+function normalize(symbol: string) {
+  return symbol.toUpperCase().replace(/\/USDT$|\/USD$/, '');
+}
+
 function iconUrlFor(symbol: string) {
-  const sym = symbol.toLowerCase();
+  const sym = normalize(symbol).toLowerCase();
   return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/${sym}.svg`;
 }
 
 function pngFallbackUrlFor(symbol: string) {
-  const sym = symbol.toLowerCase();
+  const sym = normalize(symbol).toLowerCase();
   // Use 64px color PNG as a broadly compatible fallback
   return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/${sym}.png`;
 }
@@ -24,7 +29,8 @@ const CACHE_TTL = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 export function AssetIcon({ symbol, size = 24, className }: AssetIconProps) {
   const [src, setSrc] = useState<string | null>(null);
-  const cacheKey = useMemo(() => `icon.${symbol.toUpperCase()}`, [symbol]);
+  const cacheKey = useMemo(() => `icon.${normalize(symbol)}`, [symbol]);
+  const { getIconUrl } = useCryptoIcons();
 
   useEffect(() => {
     const cached = cacheGet<string>(cacheKey);
@@ -33,8 +39,17 @@ export function AssetIcon({ symbol, size = 24, className }: AssetIconProps) {
       return;
     }
 
-    const url = iconUrlFor(symbol);
     let didCancel = false;
+
+    // 0) Prefer CoinGecko mapping to avoid 404 noise for symbols missing in spothq
+    const cgUrlEarly = getIconUrl(normalize(symbol));
+    if (cgUrlEarly) {
+      setSrc(cgUrlEarly);
+      cacheSet(cacheKey, cgUrlEarly, CACHE_TTL);
+      return;
+    }
+
+    const url = iconUrlFor(symbol);
 
     // Try SVG first
     fetch(url)
@@ -48,7 +63,9 @@ export function AssetIcon({ symbol, size = 24, className }: AssetIconProps) {
         }
       })
       .catch(() => {
-        // Fallback to PNG URL (no inline to keep it simple)
+        // Fallback order:
+        // 1) spothq PNG (since we already tried SVG)
+        // 2) CoinGecko mapping as a last resort (if it appears later)
         const pngUrl = pngFallbackUrlFor(symbol);
         if (!didCancel) {
           setSrc(pngUrl);
@@ -70,6 +87,12 @@ export function AssetIcon({ symbol, size = 24, className }: AssetIconProps) {
         alt={symbol}
         className={className}
         loading="lazy"
+        onError={(e) => {
+          const img = e.currentTarget as HTMLImageElement;
+          if (img.src !== '/coin-fallback.svg') {
+            img.src = '/coin-fallback.svg';
+          }
+        }}
         referrerPolicy="no-referrer"
       />
     );

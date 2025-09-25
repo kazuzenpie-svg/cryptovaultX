@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Navbar } from '@/components/navigation/Navbar';
 import { JournalEntryForm } from '@/components/journal/JournalEntryForm';
-import { useJournalEntries } from '@/hooks/useJournalEntries';
+import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Search, Filter, Edit, Trash2, Plus } from 'lucide-react';
+import { Search, Filter, Edit, Trash2, Plus, Users, Eye } from 'lucide-react';
 
 const Journal = () => {
-  const { entries, loading, updateEntry, deleteEntry } = useJournalEntries();
+  const { entries, loading, updateEntry, deleteEntry } = useCombinedEntries();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
@@ -172,11 +172,20 @@ const Journal = () => {
                             {entry.side}
                           </Badge>
                         )}
+                        {entry.isShared && (
+                          <Badge variant="secondary" className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            Shared
+                          </Badge>
+                        )}
+                        {entry.isShared && (
+                          <Badge variant="outline" className="flex items-center gap-1">
+                            <Eye className="w-3 h-3" />
+                            Read-only
+                          </Badge>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">
-                          {new Date(entry.date).toLocaleDateString()}
-                        </span>
+                      {!entry.isShared && (
                         <div className="flex gap-1">
                           <Button 
                             variant="ghost" 
@@ -217,7 +226,7 @@ const Journal = () => {
                             </AlertDialogContent>
                           </AlertDialog>
                         </div>
-                      </div>
+                      )}
                     </div>
                     
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
@@ -256,6 +265,15 @@ const Journal = () => {
                       <div className="pt-2 border-t">
                         <span className="text-muted-foreground text-sm">Notes:</span>
                         <p className="text-sm mt-1">{entry.notes}</p>
+                      </div>
+                    )}
+                    
+                    {entry.isShared && entry.sharer_profile && (
+                      <div className="pt-2 border-t">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Users className="w-4 h-4" />
+                          <span>Shared by: {entry.sharer_profile.username}</span>
+                        </div>
                       </div>
                     )}
                   </div>

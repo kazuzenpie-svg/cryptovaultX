@@ -9,7 +9,6 @@ export interface DataSourceVisibility {
   isVisible: boolean;
   avatar_url?: string;
   username?: string;
-  entryCount?: number;
 }
 
 export function useDataVisibility() {
@@ -57,15 +56,17 @@ export function useDataVisibility() {
       isVisible: visibilitySettings.own ?? true,
       username: user?.user_metadata?.username || user?.email?.split('@')[0] || 'You'
     },
-    // Shared data sources from grants
-    ...grants.map(grant => ({
-      sourceId: grant.id,
-      sourceName: grant.sharer_profile?.username || 'Unknown User',
-      sourceType: 'shared' as const,
-      isVisible: visibilitySettings[grant.id] ?? false,
-      avatar_url: grant.sharer_profile?.avatar_url,
-      username: grant.sharer_profile?.username
-    }))
+    // Shared data sources from grants - ONLY where user is the VIEWER (recipient)
+    ...grants
+      .filter(grant => grant.viewer_id === user?.id) // Only show grants where user is the viewer
+      .map(grant => ({
+        sourceId: grant.id,
+        sourceName: grant.sharer_profile?.username || 'Unknown User',
+        sourceType: 'shared' as const,
+        isVisible: visibilitySettings[grant.id] ?? false,
+        avatar_url: grant.sharer_profile?.avatar_url,
+        username: grant.sharer_profile?.username
+      }))
   ];
 
   const toggleVisibility = (sourceId: string) => {

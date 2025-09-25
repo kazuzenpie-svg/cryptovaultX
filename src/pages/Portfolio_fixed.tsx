@@ -9,7 +9,6 @@ import { usePortfolioMetrics } from '../hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '../hooks/useCombinedEntries';
 import { useDataVisibility } from '../hooks/useDataVisibility';
 import { useCryptoPrices } from '../hooks/useCryptoPrices';
-import { AssetIcon } from '../components/analytics/AssetIcon';
 import { useNavigate } from 'react-router-dom';
 import {
   PieChart,
@@ -319,8 +318,10 @@ export default function Portfolio() {
                         style={{ animationDelay: `${0.5 + index * 0.05}s` }}
                       >
                         <div className="flex items-center gap-4 min-w-0">
-                          <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center overflow-hidden">
-                            <AssetIcon symbol={asset.asset} size={32} className="w-8 h-8 object-contain" />
+                          <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">
+                              {asset.asset.substring(0, 3).toUpperCase()}
+                            </span>
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-semibold text-lg truncate max-w-[180px] sm:max-w-[220px]">{asset.asset}</h3>
