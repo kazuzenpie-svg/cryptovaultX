@@ -1,0 +1,758 @@
+# CryptoVault Database - Complete Implementation Guide
+
+## Prerequisites & Setup
+
+### 1. Initial Supabase Configuration
+```sql
+-- Enable required extensions (run first)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+```
+
+### 2. Naming Conventions
+- **Tables**: snake_case, plural nouns (e.g., `journal_entries`, `access_grants`)
+- **Columns**: snake_case (e.g., `user_id`, `created_at`, `preferred_currency`)
+- **Indexes**: `idx_tablename_columns` (e.g., `idx_entries_user_type_date`)
+- **Policies**: Descriptive names (e.g., `"Users can view own profile"`)
+- **Functions**: snake_case with verb (e.g., `update_updated_at_column`)
+- **Triggers**: `trigger_action_table` (e.g., `trigger_auto_cashflow`)
+- **Enums**: snake_case (e.g., `privacy_level`, `entry_type`)
+
+---
+
+## STEP 1: Create All Enums (Execute in Order)
+
+```sql
+-- Privacy levels for user profiles
+CREATE TYPE privacy_level AS ENUM ('public', 'connections_only', 'private');
+
+-- Journal entry types
+CREATE TYPE entry_type AS ENUM (
+    'spot', 
+    'futures', 
+    'wallet', 
+    'dual_investment', 
+    'liquidity_mining', 
+    'liquidity_pool', 
+    'other'
+);
+
+-- Trade sides for spot/futures
+CREATE TYPE trade_side AS ENUM ('buy', 'sell');
+
+-- Access grant statuses
+CREATE TYPE grant_status AS ENUM ('pending', 'granted', 'denied', 'revoked');
+
+-- Supported currencies
+CREATE TYPE currency_code AS ENUM ('USD', 'PHP');
+
+-- Cashflow directions
+CREATE TYPE cashflow_type AS ENUM ('inflow', 'outflow');
+```
+
+---
+
+## STEP 2: Create Core Tables
+
+### Table 1: profiles
+```sql
+CREATE TABLE profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username TEXT UNIQUE NOT NULL,
+    bio TEXT,
+    avatar_url TEXT,
+    trading_focus TEXT[],
+    privacy_sharing privacy_level NOT NULL DEFAULT 'connections_only',
+    preferred_currency currency_code NOT NULL DEFAULT 'USD',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT profiles_username_length CHECK (char_length(username) >= 3 AND char_length(username) <= 30),
+    CONSTRAINT profiles_username_format CHECK (username ~ '^[a-zA-Z0-9_-]+$'),
+    CONSTRAINT profiles_bio_length CHECK (char_length(bio) <= 500)
+);
+
+-- Indexes for profiles
+CREATE INDEX idx_profiles_username ON profiles(username);
+CREATE INDEX idx_profiles_created_at ON profiles(created_at DESC);
+```
+
+### Table 2: platforms
+```sql
+CREATE TABLE platforms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    logo_url TEXT,
+    is_custom BOOLEAN NOT NULL DEFAULT false,
+    created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT platforms_name_length CHECK (char_length(name) >= 2 AND char_length(name) <= 50),
+    CONSTRAINT platforms_slug_format CHECK (slug ~ '^[a-z0-9_-]+$'),
+    CONSTRAINT platforms_slug_length CHECK (char_length(slug) >= 2 AND char_length(slug) <= 30)
+);
+
+-- Indexes for platforms
+CREATE INDEX idx_platforms_slug ON platforms(slug);
+CREATE INDEX idx_platforms_is_custom ON platforms(is_custom);
+CREATE INDEX idx_platforms_created_by ON platforms(created_by) WHERE is_custom = true;
+```
+
+### Table 3: currencies
+```sql
+CREATE TABLE currencies (
+    code currency_code PRIMARY KEY,
+    name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    is_base BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT currencies_name_length CHECK (char_length(name) >= 2 AND char_length(name) <= 50),
+    CONSTRAINT currencies_symbol_length CHECK (char_length(symbol) >= 1 AND char_length(symbol) <= 5)
+);
+
+-- Index for currencies
+CREATE INDEX idx_currencies_is_base ON currencies(is_base);
+```
+
+### Table 4: exchange_rates
+```sql
+CREATE TABLE exchange_rates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    from_currency currency_code NOT NULL REFERENCES currencies(code),
+    to_currency currency_code NOT NULL REFERENCES currencies(code),
+    rate NUMERIC(12,6) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    source TEXT NOT NULL DEFAULT 'freecurrencyapi.com',
+    
+    -- Constraints
+    CONSTRAINT exchange_rates_rate_positive CHECK (rate > 0),
+    CONSTRAINT exchange_rates_different_currencies CHECK (from_currency != to_currency),
+    CONSTRAINT exchange_rates_source_length CHECK (char_length(source) >= 3 AND char_length(source) <= 100),
+    
+    -- Unique constraint
+    UNIQUE(from_currency, to_currency)
+);
+
+-- Indexes for exchange_rates
+CREATE INDEX idx_exchange_rates_pair_updated ON exchange_rates(from_currency, to_currency, updated_at DESC);
+CREATE INDEX idx_exchange_rates_updated_at ON exchange_rates(updated_at DESC);
+```
+
+### Table 5: crypto_prices
+```sql
+CREATE TABLE crypto_prices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    asset_slug TEXT NOT NULL,
+    price_usd NUMERIC(20,8) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    source TEXT NOT NULL DEFAULT 'coingecko.com',
+    
+    -- Constraints
+    CONSTRAINT crypto_prices_asset_slug_length CHECK (char_length(asset_slug) >= 1 AND char_length(asset_slug) <= 100),
+    CONSTRAINT crypto_prices_asset_slug_format CHECK (asset_slug ~ '^[a-z0-9_-]+$'),
+    CONSTRAINT crypto_prices_price_positive CHECK (price_usd > 0),
+    CONSTRAINT crypto_prices_source_length CHECK (char_length(source) >= 3 AND char_length(source) <= 100),
+    
+    -- Unique constraint
+    UNIQUE(asset_slug)
+);
+
+-- Indexes for crypto_prices
+CREATE INDEX idx_crypto_prices_asset_updated ON crypto_prices(asset_slug, updated_at DESC);
+CREATE INDEX idx_crypto_prices_updated_at ON crypto_prices(updated_at DESC);
+```
+
+### Table 6: journal_entries
+```sql
+CREATE TABLE journal_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    type entry_type NOT NULL,
+    platform_id UUID REFERENCES platforms(id),
+    date TIMESTAMP WITH TIME ZONE NOT NULL,
+    asset TEXT NOT NULL,
+    quantity NUMERIC(20,8),
+    price_usd NUMERIC(20,4),
+    fees NUMERIC(20,8) NOT NULL DEFAULT 0,
+    pnl NUMERIC(20,4) NOT NULL DEFAULT 0,
+    side trade_side,
+    leverage INTEGER,
+    currency currency_code NOT NULL DEFAULT 'USD',
+    notes TEXT,
+    extras JSONB NOT NULL DEFAULT '{}',
+    is_personal BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT journal_entries_asset_length CHECK (char_length(asset) >= 1 AND char_length(asset) <= 50),
+    CONSTRAINT journal_entries_quantity_positive CHECK (quantity IS NULL OR quantity > 0),
+    CONSTRAINT journal_entries_price_positive CHECK (price_usd IS NULL OR price_usd > 0),
+    CONSTRAINT journal_entries_fees_non_negative CHECK (fees >= 0),
+    CONSTRAINT journal_entries_leverage_positive CHECK (leverage IS NULL OR leverage > 0),
+    CONSTRAINT journal_entries_notes_length CHECK (char_length(notes) <= 1000),
+    CONSTRAINT journal_entries_spot_requires_side CHECK (
+        (type != 'spot') OR (type = 'spot' AND side IS NOT NULL)
+    ),
+    CONSTRAINT journal_entries_futures_requires_leverage CHECK (
+        (type != 'futures') OR (type = 'futures' AND leverage IS NOT NULL)
+    )
+);
+
+-- Indexes for journal_entries
+CREATE INDEX idx_journal_entries_user_type_date ON journal_entries(user_id, type, date DESC);
+CREATE INDEX idx_journal_entries_user_date ON journal_entries(user_id, date DESC);
+CREATE INDEX idx_journal_entries_asset ON journal_entries(asset);
+CREATE INDEX idx_journal_entries_platform_id ON journal_entries(platform_id);
+CREATE INDEX idx_journal_entries_currency ON journal_entries(currency);
+CREATE INDEX idx_journal_entries_is_personal ON journal_entries(is_personal);
+CREATE INDEX idx_journal_entries_extras_cashflow ON journal_entries USING GIN ((extras->'cashflow_type'));
+```
+
+### Table 7: access_grants
+```sql
+CREATE TABLE access_grants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    viewer_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    sharer_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    status grant_status NOT NULL DEFAULT 'pending',
+    shared_types entry_type[] NOT NULL DEFAULT '{}',
+    date_from TIMESTAMP WITH TIME ZONE,
+    date_to TIMESTAMP WITH TIME ZONE,
+    min_pnl NUMERIC(20,4),
+    message TEXT,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT access_grants_different_users CHECK (viewer_id != sharer_id),
+    CONSTRAINT access_grants_valid_date_range CHECK (date_from IS NULL OR date_to IS NULL OR date_from <= date_to),
+    CONSTRAINT access_grants_message_length CHECK (char_length(message) <= 500),
+    CONSTRAINT access_grants_expires_future CHECK (expires_at IS NULL OR expires_at > created_at),
+    
+    -- Unique constraint
+    UNIQUE(viewer_id, sharer_id)
+);
+
+-- Indexes for access_grants
+CREATE INDEX idx_access_grants_viewer_id ON access_grants(viewer_id);
+CREATE INDEX idx_access_grants_sharer_id ON access_grants(sharer_id);
+CREATE INDEX idx_access_grants_status ON access_grants(status);
+CREATE INDEX idx_access_grants_expires_at ON access_grants(expires_at) WHERE expires_at IS NOT NULL;
+```
+
+---
+
+## STEP 3: Insert Seed Data
+
+### Seed currencies
+```sql
+INSERT INTO currencies (code, name, symbol, is_base) VALUES 
+('USD', 'US Dollar', '$', true),
+('PHP', 'Philippine Peso', '₱', false)
+ON CONFLICT (code) DO NOTHING;
+```
+
+### Seed platforms
+```sql
+INSERT INTO platforms (name, slug, description, logo_url, is_custom, created_by) VALUES
+('Binance', 'binance', 'Leading CEX for spot/futures trading', 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png', false, NULL),
+('Coinbase', 'coinbase', 'US-regulated exchange', 'https://cryptologos.cc/logos/coinbase-coin-logo.png', false, NULL),
+('MEXC', 'mexc', 'High-volume global exchange', 'https://cryptologos.cc/logos/mexc-logo.png', false, NULL),
+('Bitget', 'bitget', 'Derivatives-focused exchange', 'https://cryptologos.cc/logos/bitget-logo.png', false, NULL),
+('Bybit', 'bybit', 'Derivatives and spot trading', 'https://cryptologos.cc/logos/bybit-logo.png', false, NULL),
+('OKX', 'okx', 'Global CEX with DeFi tools', 'https://cryptologos.cc/logos/okx-logo.png', false, NULL),
+('HTX', 'htx', 'Former Huobi, high liquidity', 'https://cryptologos.cc/logos/htx-logo.png', false, NULL),
+('Kraken', 'kraken', 'Secure US exchange', 'https://cryptologos.cc/logos/kraken-logo.png', false, NULL),
+('Gate.io', 'gateio', 'Wide altcoin support', 'https://cryptologos.cc/logos/gateio-logo.png', false, NULL),
+('Uniswap', 'uniswap', 'Leading DEX on Ethereum', 'https://cryptologos.cc/logos/uniswap-logo.png', false, NULL),
+('PancakeSwap', 'pancakeswap', 'BSC DEX for liquidity provision', 'https://cryptologos.cc/logos/pancakeswap-logo.png', false, NULL),
+('LBank', 'lbank', 'Emerging high-volume exchange', 'https://cryptologos.cc/logos/lbank-logo.png', false, NULL)
+ON CONFLICT (slug) DO NOTHING;
+```
+
+---
+
+## STEP 4: Create Functions
+
+### Function 1: Update timestamps
+```sql
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Function 2: Auto-set cashflow type
+```sql
+CREATE OR REPLACE FUNCTION auto_set_cashflow_type()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Skip if manual override exists
+    IF NEW.extras ? 'cashflow_type' THEN
+        RETURN NEW;
+    END IF;
+
+    -- Set smart defaults based on entry type and context
+    CASE NEW.type
+        WHEN 'spot' THEN
+            NEW.extras := NEW.extras || jsonb_build_object(
+                'cashflow_type', 
+                CASE NEW.side 
+                    WHEN 'sell' THEN 'inflow'::text 
+                    ELSE 'outflow'::text 
+                END
+            );
+        WHEN 'futures' THEN
+            NEW.extras := NEW.extras || jsonb_build_object(
+                'cashflow_type', 
+                CASE WHEN NEW.pnl > 0 THEN 'inflow'::text ELSE 'outflow'::text END
+            );
+        WHEN 'wallet' THEN
+            NEW.extras := NEW.extras || jsonb_build_object('cashflow_type', 'inflow'::text);
+        WHEN 'dual_investment' THEN
+            NEW.extras := NEW.extras || jsonb_build_object('cashflow_type', 'inflow'::text);
+        WHEN 'liquidity_mining' THEN
+            NEW.extras := NEW.extras || jsonb_build_object('cashflow_type', 'inflow'::text);
+        WHEN 'liquidity_pool' THEN
+            NEW.extras := NEW.extras || jsonb_build_object('cashflow_type', 'inflow'::text);
+        ELSE
+            NEW.extras := NEW.extras || jsonb_build_object('cashflow_type', 'outflow'::text);
+    END CASE;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Function 3: Clean expired grants
+```sql
+CREATE OR REPLACE FUNCTION clean_expired_grants()
+RETURNS void AS $$
+BEGIN
+    UPDATE access_grants 
+    SET status = 'revoked'::grant_status,
+        updated_at = NOW()
+    WHERE status = 'granted'::grant_status 
+    AND expires_at IS NOT NULL 
+    AND expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
+```
+
+---
+
+## STEP 5: Create Triggers
+
+### Triggers for updated_at
+```sql
+CREATE TRIGGER trigger_profiles_updated_at 
+    BEFORE UPDATE ON profiles 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_journal_entries_updated_at 
+    BEFORE UPDATE ON journal_entries 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_access_grants_updated_at 
+    BEFORE UPDATE ON access_grants 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+### Trigger for auto cashflow
+```sql
+CREATE TRIGGER trigger_auto_cashflow 
+    BEFORE INSERT OR UPDATE ON journal_entries 
+    FOR EACH ROW 
+    EXECUTE FUNCTION auto_set_cashflow_type();
+```
+
+---
+
+## STEP 6: Enable Row Level Security
+
+### Enable RLS on all tables
+```sql
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platforms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE currencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exchange_rates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crypto_prices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE access_grants ENABLE ROW LEVEL SECURITY;
+```
+
+---
+
+## STEP 7: Create RLS Policies
+
+### Policies for profiles
+```sql
+CREATE POLICY "Users can view own profile" 
+    ON profiles 
+    FOR SELECT 
+    USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" 
+    ON profiles 
+    FOR UPDATE 
+    USING (auth.uid() = id) 
+    WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile" 
+    ON profiles 
+    FOR INSERT 
+    WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Public profiles viewable by connections" 
+    ON profiles 
+    FOR SELECT 
+    USING (
+        privacy_sharing = 'public'::privacy_level OR 
+        (
+            privacy_sharing = 'connections_only'::privacy_level AND
+            EXISTS (
+                SELECT 1 FROM access_grants 
+                WHERE (viewer_id = auth.uid() AND sharer_id = profiles.id AND status = 'granted'::grant_status)
+                OR (sharer_id = auth.uid() AND viewer_id = profiles.id AND status = 'granted'::grant_status)
+            )
+        )
+    );
+```
+
+### Policies for platforms
+```sql
+CREATE POLICY "Public read platforms" 
+    ON platforms 
+    FOR SELECT 
+    USING (true);
+
+CREATE POLICY "Users can insert custom platforms" 
+    ON platforms 
+    FOR INSERT 
+    WITH CHECK (auth.uid() IS NOT NULL AND is_custom = true AND created_by = auth.uid());
+
+CREATE POLICY "Users can update own custom platforms" 
+    ON platforms 
+    FOR UPDATE 
+    USING (is_custom = true AND created_by = auth.uid()) 
+    WITH CHECK (is_custom = true AND created_by = auth.uid());
+
+CREATE POLICY "Users can delete own custom platforms" 
+    ON platforms 
+    FOR DELETE 
+    USING (is_custom = true AND created_by = auth.uid());
+```
+
+### Policies for currencies
+```sql
+CREATE POLICY "Public read currencies" 
+    ON currencies 
+    FOR SELECT 
+    USING (true);
+```
+
+### Policies for exchange_rates
+```sql
+CREATE POLICY "Public read exchange rates" 
+    ON exchange_rates 
+    FOR SELECT 
+    USING (true);
+
+CREATE POLICY "Service role can manage exchange rates" 
+    ON exchange_rates 
+    FOR ALL 
+    USING (auth.role() = 'service_role') 
+    WITH CHECK (auth.role() = 'service_role');
+```
+
+### Policies for crypto_prices
+```sql
+CREATE POLICY "Public read crypto prices" 
+    ON crypto_prices 
+    FOR SELECT 
+    USING (true);
+
+CREATE POLICY "Service role can manage crypto prices" 
+    ON crypto_prices 
+    FOR ALL 
+    USING (auth.role() = 'service_role') 
+    WITH CHECK (auth.role() = 'service_role');
+```
+
+### Policies for journal_entries
+```sql
+CREATE POLICY "Users can manage own entries" 
+    ON journal_entries 
+    FOR ALL 
+    USING (auth.uid() = user_id) 
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view granted entries" 
+    ON journal_entries 
+    FOR SELECT 
+    USING (
+        auth.uid() = user_id OR (
+            is_personal = false AND
+            EXISTS (
+                SELECT 1 FROM access_grants ag
+                WHERE ag.viewer_id = auth.uid() 
+                AND ag.sharer_id = journal_entries.user_id 
+                AND ag.status = 'granted'::grant_status
+                AND (ag.expires_at IS NULL OR ag.expires_at > NOW())
+                AND (ag.date_from IS NULL OR journal_entries.date >= ag.date_from)
+                AND (ag.date_to IS NULL OR journal_entries.date <= ag.date_to)
+                AND (ag.min_pnl IS NULL OR journal_entries.pnl >= ag.min_pnl)
+                AND (
+                    cardinality(ag.shared_types) = 0 OR 
+                    journal_entries.type = ANY(ag.shared_types)
+                )
+            )
+        )
+    );
+```
+
+### Policies for access_grants
+```sql
+CREATE POLICY "Users can view grants where involved" 
+    ON access_grants 
+    FOR SELECT 
+    USING (auth.uid() IN (viewer_id, sharer_id));
+
+CREATE POLICY "Users can request access" 
+    ON access_grants 
+    FOR INSERT 
+    WITH CHECK (auth.uid() = viewer_id);
+
+CREATE POLICY "Sharers can manage grant status" 
+    ON access_grants 
+    FOR UPDATE 
+    USING (auth.uid() = sharer_id) 
+    WITH CHECK (auth.uid() = sharer_id);
+
+CREATE POLICY "Users can delete own requests" 
+    ON access_grants 
+    FOR DELETE 
+    USING (auth.uid() = viewer_id AND status = 'pending'::grant_status);
+```
+
+---
+
+## STEP 8: Create Views
+
+### View 1: cashflow_summary
+```sql
+CREATE VIEW cashflow_summary AS
+WITH latest_rates AS (
+    SELECT DISTINCT ON (from_currency, to_currency) 
+        from_currency, 
+        to_currency, 
+        rate,
+        updated_at
+    FROM exchange_rates 
+    ORDER BY from_currency, to_currency, updated_at DESC
+),
+entry_cashflows AS (
+    SELECT 
+        je.id,
+        je.user_id,
+        je.date,
+        je.type,
+        je.currency,
+        je.quantity,
+        je.price_usd,
+        je.pnl,
+        COALESCE((je.extras->>'cashflow_type')::text, 'outflow') AS cashflow_type,
+        COALESCE(lr_to_php.rate, 1::NUMERIC) AS usd_to_php_rate,
+        CASE 
+            WHEN je.currency = 'USD' THEN 1::NUMERIC
+            ELSE COALESCE(lr_from_usd.rate, 1::NUMERIC)
+        END AS currency_to_usd_rate
+    FROM journal_entries je
+    LEFT JOIN latest_rates lr_to_php ON (
+        lr_to_php.from_currency = 'USD' AND 
+        lr_to_php.to_currency = 'PHP'
+    )
+    LEFT JOIN latest_rates lr_from_usd ON (
+        lr_from_usd.from_currency = je.currency AND 
+        lr_from_usd.to_currency = 'USD'
+    )
+    WHERE je.extras ? 'cashflow_type'
+)
+SELECT 
+    ec.user_id,
+    ec.date,
+    ec.type,
+    ec.currency,
+    ec.cashflow_type,
+    ec.usd_to_php_rate,
+    ec.currency_to_usd_rate,
+    CASE 
+        WHEN ec.cashflow_type = 'inflow' THEN
+            COALESCE(ec.quantity * ec.price_usd * ec.currency_to_usd_rate, ec.pnl * ec.currency_to_usd_rate, 0)
+        ELSE 0
+    END AS inflow_usd,
+    CASE 
+        WHEN ec.cashflow_type = 'outflow' THEN
+            COALESCE(ec.quantity * ec.price_usd * ec.currency_to_usd_rate, ABS(ec.pnl) * ec.currency_to_usd_rate, 0)
+        ELSE 0
+    END AS outflow_usd,
+    CASE 
+        WHEN ec.cashflow_type = 'inflow' THEN
+            COALESCE(ec.quantity * ec.price_usd * ec.currency_to_usd_rate, ec.pnl * ec.currency_to_usd_rate, 0) * ec.usd_to_php_rate
+        ELSE 0
+    END AS inflow_php,
+    CASE 
+        WHEN ec.cashflow_type = 'outflow' THEN
+            COALESCE(ec.quantity * ec.price_usd * ec.currency_to_usd_rate, ABS(ec.pnl) * ec.currency_to_usd_rate, 0) * ec.usd_to_php_rate
+        ELSE 0
+    END AS outflow_php
+FROM entry_cashflows ec
+ORDER BY ec.date DESC;
+```
+
+### View 2: portfolio_summary
+```sql
+CREATE VIEW portfolio_summary AS
+WITH latest_prices AS (
+    SELECT DISTINCT ON (asset_slug) 
+        asset_slug, 
+        price_usd,
+        updated_at
+    FROM crypto_prices 
+    WHERE updated_at >= NOW() - INTERVAL '2 hours'
+    ORDER BY asset_slug, updated_at DESC
+),
+asset_positions AS (
+    SELECT 
+        je.user_id,
+        je.asset,
+        SUM(
+            CASE 
+                WHEN je.type IN ('spot', 'wallet') AND je.side = 'buy' THEN je.quantity
+                WHEN je.type IN ('spot', 'wallet') AND je.side = 'sell' THEN -je.quantity
+                WHEN je.type = 'wallet' THEN COALESCE(je.quantity, 0)
+                ELSE 0
+            END
+        ) AS total_quantity,
+        AVG(je.price_usd) AS avg_entry_price,
+        SUM(je.pnl) AS total_pnl
+    FROM journal_entries je
+    WHERE je.type IN ('spot', 'wallet')
+    GROUP BY je.user_id, je.asset
+    HAVING SUM(
+        CASE 
+            WHEN je.type IN ('spot', 'wallet') AND je.side = 'buy' THEN je.quantity
+            WHEN je.type IN ('spot', 'wallet') AND je.side = 'sell' THEN -je.quantity
+            WHEN je.type = 'wallet' THEN COALESCE(je.quantity, 0)
+            ELSE 0
+        END
+    ) > 0
+)
+SELECT 
+    ap.user_id,
+    ap.asset,
+    ap.total_quantity,
+    ap.avg_entry_price,
+    ap.total_pnl,
+    COALESCE(lp.price_usd, ap.avg_entry_price) AS current_price_usd,
+    ap.total_quantity * COALESCE(lp.price_usd, ap.avg_entry_price) AS current_value_usd,
+    lp.updated_at AS price_last_updated
+FROM asset_positions ap
+LEFT JOIN latest_prices lp ON (ap.asset = lp.asset_slug)
+ORDER BY current_value_usd DESC;
+```
+
+---
+
+## STEP 9: Create Additional Indexes for Performance
+
+```sql
+-- Composite indexes for common query patterns
+CREATE INDEX idx_journal_entries_user_date_type ON journal_entries(user_id, date DESC, type);
+CREATE INDEX idx_journal_entries_asset_date ON journal_entries(asset, date DESC);
+CREATE INDEX idx_access_grants_sharer_status ON access_grants(sharer_id, status);
+CREATE INDEX idx_access_grants_viewer_status ON access_grants(viewer_id, status);
+
+-- Partial indexes for active data
+CREATE INDEX idx_journal_entries_recent ON journal_entries(date DESC) WHERE date >= NOW() - INTERVAL '1 year';
+CREATE INDEX idx_access_grants_active ON access_grants(status) WHERE status IN ('pending', 'granted');
+
+-- GIN indexes for JSONB operations
+CREATE INDEX idx_journal_entries_extras_gin ON journal_entries USING GIN (extras);
+```
+
+---
+
+## STEP 10: Verification Queries
+
+Run these queries to verify the database setup:
+
+```sql
+-- Check all tables exist
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+AND table_type = 'BASE TABLE'
+ORDER BY table_name;
+
+-- Check all enums exist
+SELECT typname 
+FROM pg_type 
+WHERE typtype = 'e' 
+ORDER BY typname;
+
+-- Check all functions exist
+SELECT routine_name 
+FROM information_schema.routines 
+WHERE routine_schema = 'public' 
+AND routine_type = 'FUNCTION'
+ORDER BY routine_name;
+
+-- Check all triggers exist
+SELECT trigger_name, event_object_table 
+FROM information_schema.triggers 
+WHERE trigger_schema = 'public'
+ORDER BY event_object_table, trigger_name;
+
+-- Check all policies exist
+SELECT schemaname, tablename, policyname, cmd, roles 
+FROM pg_policies 
+WHERE schemaname = 'public'
+ORDER BY tablename, policyname;
+
+-- Check all indexes exist
+SELECT schemaname, tablename, indexname, indexdef 
+FROM pg_indexes 
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+
+-- Verify seed data
+SELECT 'currencies' as table_name, count(*) as row_count FROM currencies
+UNION ALL
+SELECT 'platforms', count(*) FROM platforms;
+```
+
+---
+
+## Important Notes
+
+1. **Execute in exact order**: Steps must be followed sequentially
+2. **Check each step**: Run verification queries after each major step
+3. **RLS is critical**: All policies must be in place before frontend integration
+4. **Service role**: Some operations require `service_role` for API integrations
+5. **Backup recommended**: Create backup points before major changes
+6. **Performance monitoring**: Monitor query performance with the created indexes

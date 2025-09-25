@@ -1,0 +1,249 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CryptoVault Design System - Modern Crypto Trading Theme
+All colors MUST be HSL for consistency.
+*/
+
+@layer base {
+  :root {
+    /* Core Theme - Light Mode */
+    --background: 240 10% 98%;
+    --foreground: 240 10% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 8%;
+
+    /* Crypto-inspired Primary Colors */
+    --primary: 262 83% 58%;           /* Electric purple */
+    --primary-foreground: 0 0% 98%;
+    --primary-glow: 270 100% 85%;     /* Lighter purple for glows */
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 240 10% 15%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 142 76% 36%;            /* Crypto green */
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;     /* Red for losses */
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 120 100% 25%;          /* Green for gains */
+    --success-foreground: 0 0% 98%;
+
+    --warning: 38 92% 50%;            /* Orange for alerts */
+    --warning-foreground: 0 0% 98%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 262 83% 58%;
+
+    --radius: 0.75rem;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(270 100% 75%));
+    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%), hsl(120 100% 40%));
+    --gradient-bg: linear-gradient(180deg, hsl(240 10% 98%), hsl(220 14% 96%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100% / 0.8), hsl(240 10% 98% / 0.9));
+
+    /* Shadows & Effects */
+    --shadow-elegant: 0 10px 30px -10px hsl(262 83% 58% / 0.3);
+    --shadow-glow: 0 0 40px hsl(270 100% 85% / 0.4);
+    --shadow-card: 0 4px 20px hsl(240 10% 8% / 0.08);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    /* Sidebar */
+    --sidebar-background: 240 10% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 240 10% 15%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 262 83% 58%;
+  }
+
+  .dark {
+    /* Core Theme - Dark Mode (Primary for crypto trading) */
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 7%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 7%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 262 83% 58%;           /* Electric purple */
+    --primary-foreground: 0 0% 98%;
+    --primary-glow: 270 100% 85%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 142 76% 45%;            /* Brighter green for dark mode */
+    --accent-foreground: 240 10% 4%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 120 100% 35%;          /* Brighter green */
+    --success-foreground: 0 0% 98%;
+
+    --warning: 38 92% 60%;            /* Brighter orange */
+    --warning-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 262 83% 58%;
+
+    /* Dark mode gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(270 100% 65%));
+    --gradient-success: linear-gradient(135deg, hsl(142 76% 45%), hsl(120 100% 50%));
+    --gradient-bg: linear-gradient(180deg, hsl(240 10% 4%), hsl(240 3.7% 8%));
+    --gradient-card: linear-gradient(145deg, hsl(240 10% 7% / 0.8), hsl(240 3.7% 12% / 0.9));
+
+    /* Dark mode shadows */
+    --shadow-elegant: 0 10px 30px -10px hsl(262 83% 58% / 0.4);
+    --shadow-glow: 0 0 40px hsl(270 100% 65% / 0.3);
+    --shadow-card: 0 4px 20px hsl(0 0% 0% / 0.3);
+
+    /* Sidebar dark */
+    --sidebar-background: 240 10% 4%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 262 83% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background: var(--gradient-bg);
+    transition: var(--transition-smooth);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Custom Component Styles */
+@layer components {
+  /* Glassmorphism card effect */
+  .glass-card {
+    @apply backdrop-blur-lg border border-white/10;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Crypto-style button variants */
+  .btn-primary {
+    @apply relative overflow-hidden;
+    background: var(--gradient-primary);
+    box-shadow: var(--shadow-elegant);
+    transition: var(--transition-smooth);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .btn-success {
+    background: var(--gradient-success);
+    @apply text-success-foreground;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-muted border-t-primary;
+  }
+
+  /* Glow effect for important elements */
+  .glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Smooth hover scale */
+  .hover-scale {
+    transition: var(--transition-bounce);
+  }
+
+  .hover-scale:hover {
+    transform: scale(1.05);
+  }
+
+  /* Animated gradient backgrounds */
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Slide up animation for modals/cards */
+  .slide-up {
+    animation: slide-up 0.3s ease-out;
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Fade in animation */
+  .fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Pulse for loading states */
+  .pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { 
+      box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 40px hsl(var(--primary) / 0.6);
+    }
+  }
+}

@@ -1,0 +1,676 @@
+# Product Requirements Document (PRD): CryptoVault Journal
+
+
+## 2. Overview
+### 2.1 Product Name
+CryptoVault Journal
+
+### 2.2 Product Description
+CryptoVault Journal is a fully online, manual-entry web application for tracking cryptocurrency investments and trades across multiple platforms. Built with React 18+ for a modern, responsive frontend and Supabase for authentication, real-time PostgreSQL database, and storage, the app serves as a personal ledger for spot trades, futures, wallet balances, dual investments, liquidity mining, liquidity pools, and other activities. Users can visualize their portfolio with live valuations from CoinGecko, analyze performance including multi-currency cashflow (USD/PHP), and securely share (non-personal) journal data with others via request-grant mechanisms with granular filters. The app emphasizes privacy, with sharing limited to approved connections and excluding sensitive details like full wallet addresses or KYC info. It provides smooth user experience with loading screens, confirmation dialogs, and real-time updates via Supabase Realtime. Database logic is heavily leveraged with stored functions, procedures, and triggers for efficiency, integrity, and reduced client-side computation.
+
+### 2.3 Version
+3.1 (Production MVP)
+
+### 2.4 Key Differentiators
+- **Centralized Manual Logging**: Aggregates data from disparate platforms (e.g., Binance, Uniswap) without API integrations—users input manually for full control.
+- **Modern UI/UX**: Clean, dark-themed React interface with charts (Recharts), mobile responsiveness, loading screens, and confirmation dialogs.
+- **Live Insights**: Hourly CoinGecko prices for real-time portfolio valuation; daily fiat conversions from FreeCurrencyAPI.
+- **Secure Sharing**: Peer-to-peer data sharing via requests and grants, with filters for types, dates, and PnL thresholds using Supabase RLS.
+- **Supabase-Powered Backend**: Leverages PostgreSQL for data, Auth for users (email/password), Realtime for live updates, and Storage for export files.
+- **Smooth Experience**: Loading screens for page transitions, confirmation dialogs for destructive actions, real-time notifications.
+- **Full Online Architecture**: Real-time data sync, cached API calls, CDN delivery, comprehensive error handling.
+- **Database-Centric Logic**: Extensive use of stored functions/procedures and triggers for computations (e.g., PnL), validations, audits, and automations to minimize frontend logic and ensure consistency.
+
+## 3. Goals and Objectives
+### 3.1 Business Goals
+- Enable users to maintain a unified view of their crypto activities to improve decision-making, tax reporting, and financial planning.
+- Foster community through selective sharing, positioning the app as a social tool for traders to benchmark strategies (without exposing risks).
+- Achieve 1,000 active users in Year 1 via organic growth on crypto forums and X (Twitter).
+- Establish technical foundation for scaling to 10k+ users with 99.9% uptime, leveraging database procedures for performant operations.
+
+### 3.2 User Goals
+- Effortlessly log and categorize trades/investments with smart defaults for cashflow.
+- Generate insights like PnL, portfolio allocation, live valuations, and multi-currency cashflow trends.
+- Share journal summaries with trusted peers for collaboration or advice, with fine-tuned privacy controls.
+- Experience smooth navigation with loading indicators and clear confirmation prompts for important actions.
+- Access real-time updates for shared data and price changes without manual refresh.
+
+
+## 5. Features
+### 5.1 Core Features (MVP)
+#### 5.1.1 User Authentication and Profiles
+- **Authentication**: Email and password only (Supabase Auth). 
+  - **Subject for Future Update**: Google OAuth, wallet connect (e.g., MetaMask) integration.
+- **Registration**: Email verification required; strong password requirements (8+ chars, mixed case, numbers, special chars).
+- **Login**: Email/password with "remember me" option (secure session persistence via Supabase JWT).
+- **Password Reset**: Email-based flow with secure token links (24h expiry).
+- **Profile Management**: Username (unique), bio (500 chars max), avatar upload (Supabase Storage, 2MB max, JPG/PNG), trading_focus tags (max 5), preferred_currency (USD/PHP).
+- **Privacy Settings**: Toggle sharing preferences (default: connections_only); exclude personal data flag.
+- **Session Management**: Auto-logout after 30min inactivity; manual logout with confirmation dialog; session refresh every 15min.
+
+#### 5.1.2 Journal Entry Management
+- **Entry Types** (enum-based forms with type-specific validation):
+  - **Spot**: Buy/sell trades (required: date, platform, asset_pair, side, quantity, price_usd, fees; optional: notes).
+  - **Futures**: Leveraged trades (required: all spot + leverage, entry_price, exit_price; computed: pnl via stored procedure).
+  - **Wallet**: Balance snapshots (required: date, platform, asset, quantity, currency; computed: value_usd via trigger).
+  - **Dual Investment**: Structured products (required: date, platform, asset, principal, apy, maturity_date, payout_type; extras: jsonb).
+  - **Liquidity Mining**: Rewards accrual (required: date, platform, pool, lp_tokens, rewards_earned; extras: jsonb).
+  - **Liquidity Pool**: LP positions (required: date, platform, pool_pair, amounts_a, amounts_b, fees_earned; extras: impermanent_loss).
+  - **Other**: Catch-all (required: date, asset, notes; extras: custom_json).
+- **Manual Entry**: Type-specific React forms with real-time validation, date picker (react-datepicker), asset autocomplete (debounced search), currency toggle.
+- **Smart Defaults**: Auto-flag cashflow_type via PostgreSQL trigger ('inflow' for sells/rewards/deposits; 'outflow' for buys/fees/withdrawals) with manual override.
+- **Bulk Import**: CSV upload (Supabase Storage) with preview table, validation errors highlighted, confirmation dialog before processing via stored procedure.
+- **CRUD Operations**: Create/update/delete with audit trail via trigger; delete requires confirmation dialog with undo buffer (30s).
+- **Platforms**: Pre-populated with 12 major exchanges/DEXs; custom platform creation with validation (unique name/slug) via stored function.
+- **Form Validation**: Real-time client-side (Zod schemas) + server-side (PostgreSQL CHECK constraints and functions); loading states during saves.
+
+#### 5.1.3 Dashboard and Analytics
+- **Overview Dashboard**: 
+  - Total portfolio value (live USD/PHP via cached CoinGecko prices), 24h/7d PnL, allocation pie chart (Recharts), recent activity feed.
+  - Loading spinners during data fetch; skeleton screens for charts/tables.
+- **Live Valuation**: 
+  - Hourly CoinGecko API fetches for spot/wallet assets via Supabase Edge Function.
+  - Compute current value (quantity * live_price) with currency conversion; cache in `crypto_prices` table.
+  - Loading indicator during price refresh; stale data warning (>1h old).
+- **Cashflow View**: 
+  - Timeline chart (line/bar via Recharts) showing net cashflow: Inflows minus outflows, categorized by type.
+  - Filters: Currency toggle (USD/PHP), date range (datepicker), entry type (multi-select), platform (dropdown).
+  - Metrics: Total inflow/outflow, net cashflow, cumulative balance, monthly trends via stored function.
+  - Currency conversion using cached exchange rates; display rate source and last-updated timestamp.
+- **Portfolio Analytics**: 
+  - Asset allocation pie chart, PnL performance line chart, win/loss ratio, average holding period via stored procedure.
+  - Filters: By type, platform, date range, asset with smooth transitions (React Query invalidation).
+- **Exports**: PDF/CSV reports in selected currency via Supabase Storage; progress indicator; confirmation before download.
+
+#### 5.1.4 Sharing and Bonding
+- **Request Flow**:
+  1. **Search/Add**: Username search with debounced API call, loading indicator during search.
+  2. **Send Request**: "View Request" form with optional message (500 chars); confirmation dialog before sending.
+  3. **Receive Notification**: Real-time push via Supabase Realtime; in-app notification bell with unread count.
+  4. **Review & Grant**: Modal with request details, granular controls, confirmation dialogs for grant/deny.
+  5. **Access Granted**: Viewer sees filtered entries with loading screen during initial load; real-time updates for new shared entries.
+- **Granular Controls**: 
+  - Entry types (multi-select), date range (from/to), min PnL threshold, exclude personal flag.
+  - Multi-step form with progress indicator; preview of what will be shared via stored function.
+- **Revocation**: Revoke anytime with confirmation dialog; auto-expire after 30 days with email/notification reminder via trigger.
+- **Bonding**: Mutual grants create "connections" tab with shared dashboards; real-time sync for both parties.
+- **Privacy Enforcement**: Supabase RLS policies filter data server-side; no client-side bypass possible.
+
+### 5.2 Non-MVP Features (Future)
+- **Authentication**: Google OAuth, wallet connect integration.
+- **Advanced Analytics**: Real-time price feeds (CoinGecko websocket), AI insights, tax optimization reports.
+- **Social Features**: Trading groups, anonymized trade feed, strategy templates.
+- **Mobile**: Native iOS/Android apps, push notifications.
+- **Integrations**: Exchange API imports, portfolio rebalancing tools.
+
+
+### 6.2 Entry Management
+- As a trader, I want to log a spot trade in <1 min so I can capture it immediately post-execution.
+- As an investor, I want type-specific forms with smart defaults so I don't have to remember cashflow categorization.
+- As a user with historical data, I want CSV bulk import with validation preview so I can migrate from spreadsheets easily.
+- As any user, I want confirmation dialogs for deletes so I don't accidentally lose important entries.
+
+### 6.3 Dashboard & Analytics
+- As an investor, I want live portfolio valuation with currency toggle so I can see my net worth in local currency.
+- As a trader, I want cashflow charts filtered by type and date so I can analyze spending patterns.
+- As a user, I want loading indicators during data fetch so I know the app isn't frozen.
+- As an accountant, I want exportable reports in CSV/PDF for tax filing.
+
+### 6.4 Sharing & Collaboration
+- As a trader, I want to request access to a peer's journal so I can learn from their strategies.
+- As a sharer, I want granular controls (types, dates, PnL thresholds) so I can share safely.
+- As a connection, I want real-time updates when my peer adds new trades so I can follow their activity.
+
+## 7. Technical Architecture
+### 7.1 Technology Stack
+| Component | Technology | Version | Purpose |
+|-----------|------------|---------|---------|
+| **Frontend** | React | 18.2+ | UI Framework |
+| | TypeScript | 5.1+ | Type Safety |
+| | Vite | 4.4+ | Build Tool |
+| | React Router | 6.8+ | Client-side Routing |
+| | React Query | 4.20+ | Data Fetching/Caching |
+| | Recharts | 2.5+ | Data Visualization |
+| | Material-UI | 5.14+ | Component Library |
+| | Zod | 3.21+ | Schema Validation |
+| | React Hook Form | 7.45+ | Form Management |
+| **Backend** | Supabase | 2.0+ | BaaS (Auth, DB, Storage) |
+| | PostgreSQL | 15+ | Relational Database |
+| | Supabase Edge Functions | Deno 1.37+ | Serverless Logic |
+| **APIs** | CoinGecko | Free Tier | Crypto Prices |
+| | FreeCurrencyAPI | Free Tier | Fiat Exchange Rates |
+| **Deployment** | Vercel | Pro | Frontend Hosting |
+| | Supabase | Pro | Backend Services |
+| **Monitoring** | Sentry | 7.50+ | Error Tracking |
+| | Vercel Analytics | Built-in | Performance Monitoring |
+
+### 7.2 System Architecture
+```
+┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   User Device   │    │     Frontend     │    │   Vercel CDN     │
+│  (Browser)      │◄──►│  (React 18+/TS)  │◄──►│   (Static Files) │
+└─────────────────┘    └──────────────────┘    └──────────────────┘
+                                │
+                                ▼
+┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   Supabase      │    │   Supabase Auth  │    │   PostgreSQL     │
+│   Dashboard     │◄──►│ (Email/Password) │◄──►│    (15+)         │
+└─────────────────┘    └──────────────────┘    └──────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│  Edge Functions │    │   Realtime DB    │    │    RLS Policies  │
+│ (Rate Fetching) │◄──►│ (Live Updates)   │◄──►│ (Data Security)  │
+└─────────────────┘    └──────────────────┘    └──────────────────┘
+         │                       │
+         ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐
+│  Storage        │    │   Notifications  │
+│  (Exports)      │◄──►│ (Realtime Push)  │
+└─────────────────┘    └──────────────────┘
+```
+
+### 7.3 API Specifications
+#### 7.3.1 External APIs
+**CoinGecko Price API**
+- **Endpoint**: `GET /api/v3/simple/price?ids={ids}&vs_currencies=usd`
+- **Frequency**: Hourly via Edge Function
+- **Rate Limit**: 50 calls/min (free tier)
+- **Response**: `{ "bitcoin": { "usd": 43250.12 }, "ethereum": { "usd": 2650.45 } }`
+- **Error Handling**: Cache fallback (1h), exponential backoff
+
+**FreeCurrencyAPI Exchange Rates**
+- **Endpoint**: `GET /v1/latest?apikey={key}&base_currency=USD&currencies=PHP`
+- **Frequency**: Daily via Edge Function
+- **Rate Limit**: 300 calls/month (free tier)
+- **Response**: `{ "data": { "PHP": 58.50 }, "meta": { "last_updated": "2025-09-18T00:00:00Z" } }`
+- **Error Handling**: Cache fallback (48h), user notification
+
+#### 7.3.2 Internal Supabase Queries
+**Profile Fetch**
+```sql
+SELECT id, username, bio, avatar_url, trading_focus, 
+       privacy_sharing, preferred_currency, created_at
+FROM profiles 
+WHERE id = auth.uid();
+```
+
+**Entry Listing (with RLS)**
+```sql
+SELECT id, type, platform_id, date, asset, quantity, price_usd, 
+       fees, pnl, side, currency, notes, is_personal, created_at
+FROM journal_entries 
+WHERE user_id = auth.uid()
+ORDER BY date DESC
+LIMIT 50;
+```
+
+**Cashflow Summary (Stored Function Call)**
+```sql
+SELECT * FROM get_cashflow_summary(auth.uid(), start_date, end_date, preferred_currency);
+```
+
+### 7.4 Database Schema
+#### 7.4.1 Core Tables (Normalized 3NF)
+| Table | Purpose | Key Fields | Relationships |
+|-------|---------|------------|---------------|
+| `profiles` | User metadata | `id` (PK), `username` (unique), `preferred_currency` | 1:N `journal_entries` |
+| `platforms` | Exchange/DEX catalog | `id` (PK), `name`, `slug`, `is_custom` | 1:N `journal_entries` |
+| `currencies` | Fiat currencies | `code` (PK), `symbol`, `is_base` | N:N `exchange_rates` |
+| `exchange_rates` | Fiat conversion cache | `from_currency`, `to_currency`, `rate`, `updated_at` | - |
+| `crypto_prices` | Crypto price cache | `asset_slug` (unique), `price_usd`, `updated_at` | - |
+| `journal_entries` | Trade/investment logs | `id` (PK), `user_id` (FK), `type`, `asset`, `quantity`, `pnl` | N:1 `profiles`, N:1 `platforms` |
+| `access_grants` | Sharing permissions | `viewer_id` (FK), `sharer_id` (FK), `status`, `shared_types[]` | N:1 `profiles` |
+| `audit_logs` | Entry change history | `id` (PK), `entry_id` (FK), `action`, `changed_by`, `old_value` (jsonb), `new_value` (jsonb) | N:1 `journal_entries` |
+
+
+
+
+
+### 7.5 Frontend Architecture
+#### 7.5.1 Component Structure
+```
+src/
+├── components/
+│   ├── common/          # Reusable UI components
+│   │   ├── LoadingSpinner.tsx
+│   │   ├── ConfirmDialog.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   └── NotificationToast.tsx
+│   ├── forms/           # Entry forms by type
+│   │   ├── SpotTradeForm.tsx
+│   │   ├── WalletBalanceForm.tsx
+│   │   └── BulkImportForm.tsx
+│   ├── dashboard/       # Analytics components
+│   │   ├── PortfolioChart.tsx
+│   │   ├── CashflowTimeline.tsx
+│   │   └── AssetAllocationPie.tsx
+│   └── layout/          # Layout components
+│       ├── AppLayout.tsx
+│       ├── LoadingScreen.tsx
+│       └── Navigation.tsx
+├── hooks/               # Custom React hooks
+│   ├── useEntries.ts    # Entry CRUD operations
+│   ├── useRealtime.ts   # Supabase Realtime subscriptions
+│   ├── usePrices.ts     # CoinGecko price fetching
+│   └── useAuth.ts       # Authentication state
+├── lib/                 # Utilities and config
+│   ├── supabase.ts      # Supabase client
+│   ├── validation.ts    # Zod schemas
+│   └── constants.ts     # App constants
+├── pages/               # Route components
+│   ├── Dashboard.tsx
+│   ├── Entries.tsx
+│   ├── Profile.tsx
+│   ├── Sharing.tsx
+│   └── Auth/            # Auth pages
+└── types/               # TypeScript definitions
+    ├── api.ts           # API response types
+    ├── db.ts            # Database types
+    └── components.ts    # Component props
+```
+
+#### 7.5.2 State Management
+**React Query (Primary)**
+- **Queries**: Profile, entries, platforms, prices, exchange rates, grants
+- **Mutations**: Create/update/delete entries, send/respond to grants, profile updates
+- **Cache**: Infinite queries with pagination, optimistic updates, stale-while-revalidate
+- **Invalidation**: Auto-invalidate related queries on mutations
+
+**React Context (Global State)**
+- **Auth Context**: User session, loading states, error handling
+- **UI Context**: Theme (dark/light), notifications, confirmation dialog state
+- **Currency Context**: Preferred currency, exchange rates
+
+#### 7.5.3 Loading States Implementation
+**Global Loading Screen**
+```typescript
+// LoadingContext.tsx
+interface LoadingContextType {
+  isLoading: boolean;
+  showLoader: (duration?: number) => void;
+  hideLoader: () => void;
+}
+
+const LoadingContext = createContext<LoadingContextType>({} as LoadingContextType);
+
+// LoadingScreen.tsx - Fullscreen overlay with logo and spinner
+const LoadingScreen = () => (
+  <Backdrop open={isLoading} sx={{ zIndex: 9999 }}>
+    <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+      <CircularProgress size={40} />
+      <Typography variant="h6">Loading...</Typography>
+    </Box>
+  </Backdrop>
+);
+```
+
+**Inline Loading States**
+```typescript
+// EntryCard.tsx - Individual entry loading
+const { data: entry, isLoading, error } = useQuery({
+  queryKey: ['entry', entryId],
+  queryFn: () => supabase.from('journal_entries').select('*').eq('id', entryId).single(),
+});
+
+if (isLoading) return <Skeleton variant="rectangular" height={100} />;
+if (error) return <Alert severity="error">{error.message}</Alert>;
+```
+
+### 7.6 Backend Implementation
+#### 7.6.1 Supabase Edge Functions
+**Price Fetching (Hourly Cron)**
+```typescript
+// supabase/functions/fetch-crypto-prices/index.ts
+Deno.serve(async (req) => {
+  // Get distinct assets from user's recent entries
+  const { data: assets } = await supabase
+    .from('journal_entries')
+    .select('asset')
+    .in('type', ['spot', 'wallet'])
+    .gte('date', new Date(Date.now() - 24*60*60*1000).toISOString()) // Last 24h
+    .distinct();
+
+  const assetIds = assets?.map(a => a.asset.toLowerCase().replace('/usdt', '')) || [];
+  
+  if (assetIds.length === 0) return new Response('No assets', { status: 200 });
+
+  // Batch fetch from CoinGecko
+  const coingeckoIds = assetIds.join(',');
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoIds}&vs_currencies=usd`;
+  
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('CoinGecko API failed');
+  
+  const prices = await response.json();
+  
+  // Upsert to crypto_prices table
+  const upsertData = Object.entries(prices).map(([id, data]: [string, any]) => ({
+    asset_slug: id,
+    price_usd: data.usd,
+    updated_at: new Date().toISOString()
+  }));
+
+  const { error } = await supabase
+    .from('crypto_prices')
+    .upsert(upsertData, { onConflict: 'asset_slug' });
+    
+  if (error) throw error;
+  
+  return new Response(JSON.stringify({ updated: upsertData.length }), { 
+    headers: { 'Content-Type': 'application/json' } 
+  });
+});
+```
+
+**Exchange Rate Fetching (Daily Cron)**
+```typescript
+// supabase/functions/fetch-exchange-rates/index.ts
+Deno.serve(async (req) => {
+  const apiKey = Deno.env.get('FREECURRENCY_API_KEY');
+  const url = `https://api.freecurrencyapi.com/v1/latest?apikey=${apiKey}&base_currency=USD&currencies=PHP`;
+  
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Exchange rate API failed');
+  
+  const { data } = await response.json();
+  const rate = data.PHP;
+  
+  // Upsert to exchange_rates
+  const { data: existing } = await supabase
+    .from('exchange_rates')
+    .select('id')
+    .eq('from_currency', 'USD')
+    .eq('to_currency', 'PHP')
+    .single();
+  
+  if (existing) {
+    await supabase
+      .from('exchange_rates')
+      .update({ rate, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('exchange_rates')
+      .insert({ 
+        from_currency: 'USD', 
+        to_currency: 'PHP', 
+        rate,
+        updated_at: new Date().toISOString()
+      });
+  }
+  
+  return new Response('Exchange rates updated');
+});
+```
+
+#### 7.6.2 Realtime Subscriptions
+**Entry Updates (Owner View)**
+```typescript
+// hooks/useRealtimeEntries.ts
+useEffect(() => {
+  const channel = supabase
+    .channel('entries')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'journal_entries',
+      filter: `user_id=eq.${userId}`,
+    }, (payload) => {
+      queryClient.invalidateQueries({ queryKey: ['entries'] });
+    })
+    .subscribe();
+
+  return () => { supabase.removeChannel(channel); };
+}, [userId]);
+```
+
+**Shared Entry Updates (Viewer View)**
+```typescript
+// For granted access - listen to sharer's new entries
+useEffect(() => {
+  const grants = grantsData?.filter(g => g.status === 'granted') || [];
+  
+  grants.forEach(grant => {
+    const channel = supabase
+      .channel(`shared-entries-${grant.sharer_id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'journal_entries',
+        filter: `user_id=eq.${grant.sharer_id}`,
+      }, (payload) => {
+        // Check if new entry matches grant filters
+        const newEntry = payload.new as JournalEntry;
+        if (matchesGrantFilters(newEntry, grant)) {
+          queryClient.setQueryData(['shared-entries', grant.sharer_id], (old) => 
+            [...(old || []), newEntry]
+          );
+        }
+      })
+      .subscribe();
+      
+    channels.current.push(channel);
+  });
+
+  return () => {
+    channels.current.forEach(channel => supabase.removeChannel(channel));
+    channels.current = [];
+  };
+}, [grantsData]);
+```
+
+### 7.7 Deployment & Infrastructure
+#### 7.7.1 Hosting
+**Frontend (Vercel)**
+- **Environment**: Production branch auto-deploys on merge to main
+- **Domain**: `cryptovault-journal.vercel.app` (custom domain in future)
+- **CDN**: Global edge network, automatic HTTPS
+- **Build**: Vite production build, tree-shaking, code splitting
+- **Environment Variables**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+
+**Backend (Supabase)**
+- **Database**: PostgreSQL 15+ with connection pooling
+- **Storage**: 5GB bucket for avatars/exports (Pro tier)
+- **Edge Functions**: Deno runtime, automatic scaling
+- **Realtime**: WebSocket connections, automatic reconnection
+- **Environment Variables**: API keys in Supabase secrets
+
+#### 7.7.2 CI/CD Pipeline
+**GitHub Actions Workflow**
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npm run test:e2e
+      - run: npm run build --if-present
+      - run: npm run lint
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.ORG_ID }}
+          vercel-project-id: ${{ secrets.PROJECT_ID }}
+          working-directory: ./frontend
+```
+
+#### 7.7.3 Monitoring & Logging
+**Error Tracking (Sentry)**
+```typescript
+// src/lib/sentry.ts
+import * as Sentry from "@sentry/react";
+
+if (import.meta.env.PROD) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    integrations: [new Sentry.BrowserTracing()],
+    tracesSampleRate: 1.0,
+    environment: import.meta.env.PROD ? 'production' : 'development',
+  });
+}
+
+// Error boundaries
+const AppErrorBoundary = () => {
+  const [hasError, setHasError] = useState(false);
+  
+  useEffect(() => {
+    Sentry.captureException(error, { tags: { component: 'App' } });
+  }, [error]);
+  
+  // Fallback UI
+  if (hasError) {
+    return (
+      <Alert severity="error" action={<Button onClick={() => window.location.reload()}>Retry</Button>}>
+        Something went wrong. Please try reloading the page.
+      </Alert>
+    );
+  }
+};
+```
+
+**Performance Monitoring (Vercel Analytics)**
+- **Core Web Vitals**: LCP < 2.5s, FID < 100ms, CLS < 0.1
+- **Page Load Times**: Track route-specific performance
+- **API Response Times**: Monitor Supabase query performance
+- **User Journeys**: Funnel analysis for onboarding, entry creation
+
+## 8. Non-Functional Requirements
+### 8.1 Performance
+- **Page Load**: <2s Time to Interactive (TTI) for dashboard
+- **API Response**: <500ms for 95% of Supabase queries
+- **Real-time**: <100ms latency for entry updates
+- **Bundle Size**: <150KB gzipped for initial load
+- **Caching**: React Query TTL 5min for entries, 1h for prices
+- **Database Procedures**: <10ms execution time for computations
+
+### 8.2 Security
+- **Authentication**: Supabase JWT with RLS; HTTPS everywhere
+- **Data Protection**: Personal data flagged and excluded from sharing
+- **Input Validation**: Zod schemas client-side, PostgreSQL constraints and functions server-side
+- **Rate Limiting**: Vercel edge rate limiting, Supabase query limits
+- **CORS**: Strict origin policy (`https://cryptovault-journal.vercel.app`)
+
+### 8.3 Scalability
+- **Users**: Handle 10k concurrent users via Supabase auto-scaling
+- **Database**: PostgreSQL connection pooling, read replicas for analytics
+- **Storage**: Supabase Storage with CDN distribution
+- **Edge Functions**: Automatic scaling, 100ms cold start target
+
+### 8.4 Reliability
+- **Uptime**: 99.9% SLA via Vercel/Supabase
+- **Error Rate**: <1% of requests return 5xx errors
+- **Backup**: Daily PostgreSQL snapshots, 7-day retention
+- **Fallbacks**: Cached prices/rates, offline entry queuing
+
+## 9. User Interface Specifications
+### 9.1 Loading States
+- **Global Loading**: Full-screen overlay (z-index 9999), app logo, circular progress, optional progress text
+- **Inline Loading**: Skeleton screens for lists (shimmer effect), circular progress for buttons, linear progress for page headers
+- **Timing**: Loading screen appears within 100ms of navigation, dismisses on data ready or 3s timeout
+
+### 9.2 Confirmation Dialogs
+- **Design**: Material-UI Dialog (max-width 400px), warning icon, clear title/body, red Confirm button, neutral Cancel button
+- **Usage**: Required for delete entry, revoke grant, logout, bulk import, sharing requests
+- **Accessibility**: ARIA labels, keyboard focus management, screen reader announcements
+
+### 9.3 Error Handling
+- **Global Errors**: Friendly error pages with retry button, Sentry logging
+- **Inline Errors**: Form field validation (red border, helper text), API error toasts with retry options
+- **Offline State**: Banner with sync progress, queued items count, auto-retry on reconnect
+
+### 9.4 Responsive Design
+- **Breakpoints**: Mobile (0-600px), Tablet (600-1024px), Desktop (1024px+)
+- **Mobile First**: Touch-friendly buttons (48px min), swipe gestures for navigation
+- **Charts**: Responsive Recharts with mobile-optimized legends/tooltips
+
+## 10. Testing Strategy
+### 10.1 Unit Tests (Jest + React Testing Library)
+- **Coverage**: 80%+ for components, hooks, utilities
+- **Entry Forms**: Validation, submission, error states
+- **API Hooks**: Success, error, loading states
+- **Components**: Loading, error, empty states
+
+### 10.2 Integration Tests (Cypress)
+- **User Flows**: Registration, entry creation, sharing workflow
+- **Real-time**: Entry updates, notification delivery
+- **Edge Cases**: Offline behavior, API failures, slow networks
+
+### 10.3 Performance Tests
+- **Lighthouse**: 90+ score for Performance, Accessibility, Best Practices
+- **Bundle Analyzer**: Monitor bundle size, identify large dependencies
+- **Load Testing**: Artillery tests for 1k concurrent users
+
+### 10.4 Database Tests
+- **Unit Tests**: PL/pgSQL functions/procedures (pgTAP or manual scripts)
+- **Integration**: Trigger activation, RLS enforcement, procedure performance
+- **Data Integrity**: Simulate inserts/updates/deletes, verify audits and computations
+
+## 11. Timeline & Milestones
+### 11.1 Phase 1: Foundation (Weeks 1-2)
+- [ ] Supabase setup (DB schema, RLS, Edge Functions, functions/procedures/triggers)
+- [ ] React scaffold (Vite, TypeScript, routing, auth)
+- [ ] Basic components (LoadingScreen, ConfirmDialog, forms)
+- [ ] Environment setup (Vercel, GitHub Actions)
+
+### 11.2 Phase 2: Core Features (Weeks 3-5)
+- [ ] Authentication flows (signup, login, profile)
+- [ ] Entry CRUD with type-specific forms and procedure calls
+- [ ] Dashboard with charts (Recharts integration)
+- [ ] Platform management (pre-populated + custom via functions)
+
+### 11.3 Phase 3: Analytics & Sharing (Weeks 6-7)
+- [ ] Live pricing (CoinGecko Edge Function)
+- [ ] Cashflow views with currency conversion via functions
+- [ ] Sharing system (requests, grants, RLS)
+- [ ] Real-time subscriptions
+
+### 11.4 Phase 4: Polish & Deploy (Week 8)
+- [ ] Loading states, error boundaries, UX polish
+- [ ] Testing (unit, integration, performance, database)
+- [ ] Monitoring setup (Sentry, Vercel Analytics)
+- [ ] Production deployment and monitoring
+
+### 11.5 Post-MVP (Weeks 9-12)
+- [ ] User feedback integration
+- [ ] Performance optimizations
+- [ ] Additional entry types
+- [ ] Export functionality
+
+## 12. Risks & Mitigations
+| Risk | Impact | Mitigation | Owner |
+|------|--------|------------|--------|
+| Supabase free tier limits | High | Monitor usage, plan Pro upgrade at 500 users | DevOps |
+| CoinGecko API rate limits | Medium | Hourly caching, batch requests, fallback to entry prices | Backend |
+| Complex RLS debugging | High | Comprehensive tests, logging, policy validation scripts | Backend |
+| Real-time subscription scaling | Medium | Connection limits, efficient filters, pagination | Backend |
+| Bundle size growth | Low | Code splitting, tree-shaking, dependency audit | Frontend |
+| User adoption of sharing | Medium | Onboarding tutorials, example workflows, social proof | Product |
+| Database procedure performance | Medium | Indexing, query optimization, load testing on functions | Backend |
+
+
+
+**Approval Signatures:**
+
+**Product Owner:** Kent Asna **Date:** __________
+
+**Technical Lead:** Kent Asna **Date:** __________
+
+**Designer:** Grok AI , Kent Asna **Date:** __________

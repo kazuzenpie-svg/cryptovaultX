@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Optional: provide a sitemap when available
+Sitemap: /sitemap.xml
