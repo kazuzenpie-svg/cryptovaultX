@@ -8,8 +8,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useJournalEntries, CreateJournalEntryData } from '@/hooks/useJournalEntries';
 import { usePlatforms } from '@/hooks/usePlatforms';
+import { Info } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const entrySchema = z.object({
   type: z.enum(['spot', 'futures', 'wallet', 'dual_investment', 'liquidity_mining', 'liquidity_pool', 'other']),
@@ -37,6 +40,7 @@ interface JournalEntryFormProps {
 export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntryFormProps) {
   const { createEntry, loading } = useJournalEntries();
   const { platforms } = usePlatforms();
+  const { toast } = useToast();
   const [selectedType, setSelectedType] = useState<FormData['type']>(initialType);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<FormData>({
@@ -57,6 +61,25 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
   const watchedType = watch('type');
 
   const onSubmit = async (data: FormData) => {
+    // Validate required fields based on entry type
+    if (data.type === 'spot' && !data.side) {
+      toast({
+        title: "Missing required field",
+        description: "Please select a side (Buy/Sell) for spot trades.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (data.type === 'futures' && !data.leverage) {
+      toast({
+        title: "Missing required field", 
+        description: "Please enter leverage for futures trades.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const entryData: CreateJournalEntryData = {
       type: data.type!,
       asset: data.asset,
@@ -204,6 +227,15 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
       
       {/* Form content */}
       <div className="overflow-y-auto max-h-[calc(90vh-80px)] px-4 pb-6">
+        {/* Entry Type Info */}
+        <Alert className="mb-4 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800 dark:text-blue-200">
+            <strong>Entry Types:</strong> Spot (buy/sell trades), Futures (leveraged positions), 
+            Wallet (balance updates), and other investment activities.
+          </AlertDescription>
+        </Alert>
+
         <form id="journal-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6 pt-4">
           <div className="grid grid-cols-1 gap-4">
             <div className="flex items-center gap-4">

@@ -1,6 +1,9 @@
-import { usePortfolio } from '@/hooks/usePortfolio';
+import { usePortfolioMetrics } from '@/hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { useDataVisibility } from '@/hooks/useDataVisibility';
+import { PnLCalendar } from '@/components/analytics/PnLCalendar';
+import { PerformanceMetrics } from '@/components/analytics/PerformanceMetrics';
+import { TradingHeatmap } from '@/components/analytics/TradingHeatmap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,7 +26,7 @@ import {
 import { format } from 'date-fns';
 
 export default function Analytics() {
-  const { cashflow, loading, refetch } = usePortfolio();
+  const { metrics, loading } = usePortfolioMetrics();
   const { entries, loading: entriesLoading } = useCombinedEntries();
   const { dataSources, getVisibleSources } = useDataVisibility();
 
@@ -42,19 +45,38 @@ export default function Analytics() {
   const ownEntries = entries.filter(e => !e.isShared);
   const sharedEntries = entries.filter(e => e.isShared);
 
-  // Calculate summary stats
-  const totalInflows = cashflow.reduce((sum, item) => sum + (item.inflow_usd || 0), 0);
-  const totalOutflows = cashflow.reduce((sum, item) => sum + (item.outflow_usd || 0), 0);
+  // Calculate summary stats from entries
+  const totalInflows = entries
+    .filter(e => e.pnl > 0 || (e.type === 'spot' && e.side === 'sell'))
+    .reduce((sum, e) => sum + Math.abs(e.pnl) + (e.quantity && e.price_usd && e.side === 'sell' ? e.quantity * e.price_usd : 0), 0);
+  
+  const totalOutflows = entries
+    .filter(e => e.pnl < 0 || (e.type === 'spot' && e.side === 'buy'))
+    .reduce((sum, e) => sum + Math.abs(e.pnl) + (e.quantity && e.price_usd && e.side === 'buy' ? e.quantity * e.price_usd : 0), 0);
+  
   const netFlow = totalInflows - totalOutflows;
 
-  // Group by type for analysis
-  const typeBreakdown = cashflow.reduce((acc, item) => {
-    if (!acc[item.type]) {
-      acc[item.type] = { inflow: 0, outflow: 0, count: 0 };
+  // Group by type for analysis from entries
+  const typeBreakdown = entries.reduce((acc, entry) => {
+    const type = entry.type;
+    if (!acc[type]) {
+      acc[type] = { inflow: 0, outflow: 0, count: 0 };
     }
-    acc[item.type].inflow += item.inflow_usd || 0;
-    acc[item.type].outflow += item.outflow_usd || 0;
-    acc[item.type].count += 1;
+    
+    // Calculate inflow/outflow based on entry type and P&L
+    if (entry.pnl > 0 || (entry.type === 'spot' && entry.side === 'sell')) {
+      acc[type].inflow += Math.abs(entry.pnl);
+      if (entry.quantity && entry.price_usd && entry.side === 'sell') {
+        acc[type].inflow += entry.quantity * entry.price_usd;
+      }
+    } else if (entry.pnl < 0 || (entry.type === 'spot' && entry.side === 'buy')) {
+      acc[type].outflow += Math.abs(entry.pnl);
+      if (entry.quantity && entry.price_usd && entry.side === 'buy') {
+        acc[type].outflow += entry.quantity * entry.price_usd;
+      }
+    }
+    
+    acc[type].count += 1;
     return acc;
   }, {} as Record<string, { inflow: number; outflow: number; count: number }>);
 
@@ -106,15 +128,25 @@ export default function Analytics() {
                 </div>
               )}
             </div>
-            
-            <Button onClick={() => refetch()} variant="outline" className="hover-scale">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
+          </div>
+
+          {/* Performance Overview */}
+          <div className="fade-in">
+            <PerformanceMetrics />
+          </div>
+
+          {/* P&L Calendar */}
+          <div className="fade-in" style={{ animationDelay: '0.1s' }}>
+            <PnLCalendar />
+          </div>
+
+          {/* Trading Heatmap */}
+          <div className="fade-in" style={{ animationDelay: '0.2s' }}>
+            <TradingHeatmap />
           </div>
 
           {/* Cashflow Summary - Mobile Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 fade-in" style={{ animationDelay: '0.3s' }}>
             <Card className="glass-card fade-in">
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
@@ -223,7 +255,7 @@ export default function Analytics() {
           )}
 
           {/* Activity Breakdown */}
-          <Card className="glass-card fade-in" style={{ animationDelay: '0.3s' }}>
+          <Card className="glass-card fade-in" style={{ animationDelay: '0.4s' }}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary" />
@@ -286,63 +318,6 @@ export default function Analytics() {
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
-          <Card className="glass-card fade-in" style={{ animationDelay: '0.4s' }}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cashflow.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Calendar className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">No recent activity</h3>
-                  <p className="text-muted-foreground">
-                    Your recent trading activity will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cashflow.slice(0, 10).map((item, index) => (
-                    <div 
-                      key={index}
-                      className="flex items-center justify-between p-3 rounded-lg border-l-4 border-l-primary/20 bg-accent/5"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${
-                          item.cashflow_type === 'inflow' ? 'bg-success' : 'bg-destructive'
-                        }`} />
-                        <div>
-                          <div className="font-medium capitalize">
-                            {entryTypeLabels[item.type as keyof typeof entryTypeLabels] || item.type}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {format(new Date(item.date), 'MMM dd, yyyy')}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <div className={`font-medium ${
-                          item.cashflow_type === 'inflow' ? 'text-success' : 'text-destructive'
-                        }`}>
-                          {item.cashflow_type === 'inflow' ? '+' : '-'}$
-                          {((item.inflow_usd || 0) + (item.outflow_usd || 0)).toLocaleString()}
-                        </div>
-                        <div className="text-sm text-muted-foreground capitalize">
-                          {item.cashflow_type}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
     </>

@@ -293,6 +293,10 @@ export function useCryptoPrices() {
     getAssetChange,
     getCoingeckoId,
     canMakeApiCall,
-    getTimeUntilNextCall
+    getTimeUntilNextCall,
+    updatePortfolioWithLivePrices: () => {
+      // This is a placeholder - the actual implementation would be in usePortfolio
+      console.log('Updating portfolio with live prices...');
+    }
   };
 }

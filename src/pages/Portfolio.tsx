@@ -1,13 +1,15 @@
 
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PageLoading } from '@/components/LoadingSpinner';
 import { Navbar } from '@/components/navigation/Navbar';
 import { DemoDataNotice } from '@/components/ui/demo-notice';
-import { usePortfolio } from '@/hooks/usePortfolio';
+import { usePortfolioMetrics } from '@/hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { useDataVisibility } from '@/hooks/useDataVisibility';
+import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { 
   PieChart, 
   TrendingUp, 
@@ -23,15 +25,69 @@ import {
 import { format } from 'date-fns';
 
 export default function Portfolio() {
-  const { portfolio, loading, getPortfolioStats, refetch } = usePortfolio();
+  const { metrics, loading } = usePortfolioMetrics();
   const { entries, loading: entriesLoading } = useCombinedEntries();
   const { dataSources, getVisibleSources } = useDataVisibility();
-  const stats = getPortfolioStats();
+  const { getAssetPrice, lastUpdated, updatePortfolioWithLivePrices } = useCryptoPrices();
 
   const isLoading = loading || entriesLoading;
   const visibleSources = getVisibleSources();
   const sharedEntries = entries.filter(e => e.isShared);
 
+  // Calculate portfolio holdings
+  const portfolio = useMemo(() => {
+    const holdings = new Map<string, {
+      quantity: number;
+      avgPrice: number;
+      totalCost: number;
+      pnl: number;
+    }>();
+
+    entries.forEach(entry => {
+      if (entry.type === 'spot' || entry.type === 'wallet') {
+        const current = holdings.get(entry.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, pnl: 0 };
+        
+        if (entry.type === 'spot' && entry.quantity && entry.price_usd) {
+          const quantity = entry.side === 'buy' ? entry.quantity : -entry.quantity;
+          const cost = quantity * entry.price_usd;
+          
+          if (quantity > 0) {
+            const newQuantity = current.quantity + quantity;
+            const newTotalCost = current.totalCost + cost;
+            current.avgPrice = newQuantity > 0 ? newTotalCost / newQuantity : 0;
+            current.quantity = newQuantity;
+            current.totalCost = newTotalCost;
+          } else {
+            current.quantity += quantity;
+            current.totalCost += cost;
+          }
+        } else if (entry.type === 'wallet' && entry.quantity) {
+          current.quantity += entry.quantity;
+        }
+        
+        current.pnl += entry.pnl;
+        holdings.set(entry.asset, current);
+      }
+    });
+
+    return Array.from(holdings.entries())
+      .filter(([_, holding]) => holding.quantity > 0)
+      .map(([asset, holding]) => {
+        const currentPrice = getAssetPrice(asset) || holding.avgPrice;
+        const currentValue = holding.quantity * currentPrice;
+        
+        return {
+          asset,
+          total_quantity: holding.quantity,
+          avg_entry_price: holding.avgPrice,
+          current_price_usd: currentPrice,
+          current_value_usd: currentValue,
+          total_pnl: holding.pnl,
+          price_last_updated: lastUpdated?.toISOString() || new Date().toISOString()
+        };
+      })
+      .sort((a, b) => b.current_value_usd - a.current_value_usd);
+  }, [entries, getAssetPrice, lastUpdated]);
   if (isLoading) {
     return (
       <>
@@ -83,9 +139,9 @@ export default function Portfolio() {
               )}
             </div>
             
-            <Button onClick={() => refetch()} variant="outline" className="hover-scale">
+            <Button onClick={() => updatePortfolioWithLivePrices()} variant="outline" className="hover-scale">
               <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
+              Update Prices
             </Button>
           </div>
 
@@ -97,7 +153,7 @@ export default function Portfolio() {
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total Value</p>
                     <div className="text-lg sm:text-2xl font-bold">
-                      ${stats.totalValue.toLocaleString()}
+                      ${metrics.totalValue.toLocaleString()}
                     </div>
                   </div>
                   <div className="w-8 h-8 sm:w-12 sm:h-12 bg-primary/20 rounded-lg flex items-center justify-center self-end sm:self-auto">
@@ -113,21 +169,21 @@ export default function Portfolio() {
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total P&L</p>
                     <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 ${
-                      stats.totalPnL >= 0 ? 'text-success' : 'text-destructive'
+                      metrics.totalPnL >= 0 ? 'text-success' : 'text-destructive'
                     }`}>
-                      {stats.totalPnL >= 0 ? (
+                      {metrics.totalPnL >= 0 ? (
                         <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                       ) : (
                         <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
                       )}
-                      <span className="text-sm sm:text-base">{stats.totalPnL >= 0 ? '+' : ''}${stats.totalPnL.toLocaleString()}</span>
+                      <span className="text-sm sm:text-base">{metrics.totalPnL >= 0 ? '+' : ''}${metrics.totalPnL.toLocaleString()}</span>
                     </div>
                   </div>
                   <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center self-end sm:self-auto ${
-                    stats.totalPnL >= 0 ? 'bg-success/20' : 'bg-destructive/20'
+                    metrics.totalPnL >= 0 ? 'bg-success/20' : 'bg-destructive/20'
                   }`}>
                     <DollarSign className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                      stats.totalPnL >= 0 ? 'text-success' : 'text-destructive'
+                      metrics.totalPnL >= 0 ? 'text-success' : 'text-destructive'
                     }`} />
                   </div>
                 </div>
@@ -140,16 +196,16 @@ export default function Portfolio() {
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">P&L %</p>
                     <div className={`text-lg sm:text-2xl font-bold ${
-                      stats.totalPnLPercentage >= 0 ? 'text-success' : 'text-destructive'
+                      metrics.totalPnLPercentage >= 0 ? 'text-success' : 'text-destructive'
                     }`}>
-                      <span className="text-sm sm:text-base">{stats.totalPnLPercentage >= 0 ? '+' : ''}{stats.totalPnLPercentage.toFixed(2)}%</span>
+                      <span className="text-sm sm:text-base">{metrics.totalPnLPercentage >= 0 ? '+' : ''}{metrics.totalPnLPercentage.toFixed(2)}%</span>
                     </div>
                   </div>
                   <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center self-end sm:self-auto ${
-                    stats.totalPnLPercentage >= 0 ? 'bg-success/20' : 'bg-destructive/20'
+                    metrics.totalPnLPercentage >= 0 ? 'bg-success/20' : 'bg-destructive/20'
                   }`}>
                     <BarChart3 className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                      stats.totalPnLPercentage >= 0 ? 'text-success' : 'text-destructive'
+                      metrics.totalPnLPercentage >= 0 ? 'text-success' : 'text-destructive'
                     }`} />
                   </div>
                 </div>
@@ -161,7 +217,7 @@ export default function Portfolio() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div className="mb-2 sm:mb-0">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">Assets</p>
-                    <div className="text-lg sm:text-2xl font-bold">{stats.assetCount}</div>
+                    <div className="text-lg sm:text-2xl font-bold">{metrics.assetCount}</div>
                   </div>
                   <div className="w-8 h-8 sm:w-12 sm:h-12 bg-accent/20 rounded-lg flex items-center justify-center self-end sm:self-auto">
                     <Eye className="w-4 h-4 sm:w-6 sm:h-6 text-accent" />

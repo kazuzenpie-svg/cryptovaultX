@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { usePortfolio } from '@/hooks/usePortfolio';
+import { usePortfolioMetrics } from '@/hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { PageLoading } from '@/components/LoadingSpinner';
@@ -24,9 +24,9 @@ import {
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
-  const { portfolio, getPortfolioStats, loading: portfolioLoading } = usePortfolio();
+  const { metrics, loading: metricsLoading } = usePortfolioMetrics();
   const { entries } = useCombinedEntries();
-  const { lastUpdated, lastApiCall, getTimeUntilNextCall, canMakeApiCall } = useCryptoPrices();
+  const { lastUpdated, lastApiCall, getTimeUntilNextCall, canMakeApiCall, fetchSimplePrices } = useCryptoPrices();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,7 +35,20 @@ export default function Dashboard() {
     }
   }, [user, loading, navigate]);
 
-  if (loading || portfolioLoading) {
+  // Auto-refresh prices for dashboard
+  useEffect(() => {
+    if (entries.length > 0 && canMakeApiCall()) {
+      const assets = [...new Set(entries
+        .filter(e => e.type === 'spot' || e.type === 'wallet')
+        .map(e => e.asset)
+      )];
+      if (assets.length > 0) {
+        fetchSimplePrices(assets);
+      }
+    }
+  }, [entries, canMakeApiCall, fetchSimplePrices]);
+
+  if (loading || metricsLoading) {
     return <PageLoading text="Loading your dashboard..." />;
   }
 
@@ -43,53 +56,40 @@ export default function Dashboard() {
     return <PageLoading text="Redirecting to login..." />;
   }
 
-  // Get real data from hooks
-  const portfolioStats = getPortfolioStats();
   const recentEntries = entries.slice(0, 5);
-  const todaysPnL = entries
-    .filter(entry => {
-      const today = new Date();
-      const entryDate = new Date(entry.date);
-      return entryDate.toDateString() === today.toDateString();
-    })
-    .reduce((sum, entry) => sum + entry.pnl, 0);
 
   const stats = [
     {
       title: 'Total Portfolio',
-      value: portfolioStats.totalValue > 0 ? `$${portfolioStats.totalValue.toLocaleString()}` : '$0.00',
-      change: portfolioStats.totalPnL !== 0 
-        ? `${portfolioStats.totalPnL > 0 ? '+' : ''}${portfolioStats.totalPnLPercentage.toFixed(1)}% (${portfolioStats.totalPnL > 0 ? '+' : ''}$${Math.abs(portfolioStats.totalPnL).toLocaleString()})`
+      value: metrics.totalValue > 0 ? `$${metrics.totalValue.toLocaleString()}` : '$0.00',
+      change: metrics.totalPnL !== 0 
+        ? `${metrics.totalPnL > 0 ? '+' : ''}${metrics.totalPnLPercentage.toFixed(1)}% (${metrics.totalPnL > 0 ? '+' : ''}$${Math.abs(metrics.totalPnL).toLocaleString()})`
         : 'No change',
-      changeType: portfolioStats.totalPnL > 0 ? 'positive' as const : portfolioStats.totalPnL < 0 ? 'negative' as const : 'neutral' as const,
+      changeType: metrics.totalPnL > 0 ? 'positive' as const : metrics.totalPnL < 0 ? 'negative' as const : 'neutral' as const,
       icon: Wallet,
-      description: 'Across all platforms'
+      description: `${metrics.assetCount} assets tracked`
     },
     {
       title: 'Today\'s P&L',
-      value: todaysPnL !== 0 ? `${todaysPnL > 0 ? '+' : ''}$${Math.abs(todaysPnL).toLocaleString()}` : '$0.00',
-      change: todaysPnL !== 0 ? `${entries.filter(e => new Date(e.date).toDateString() === new Date().toDateString()).length} trades today` : 'No trades today',
-      changeType: todaysPnL > 0 ? 'positive' as const : todaysPnL < 0 ? 'negative' as const : 'neutral' as const,
+      value: metrics.dayPnL !== 0 ? `${metrics.dayPnL > 0 ? '+' : ''}$${Math.abs(metrics.dayPnL).toLocaleString()}` : '$0.00',
+      change: `Week: ${metrics.weekPnL >= 0 ? '+' : ''}$${metrics.weekPnL.toLocaleString()}`,
+      changeType: metrics.dayPnL > 0 ? 'positive' as const : metrics.dayPnL < 0 ? 'negative' as const : 'neutral' as const,
       icon: TrendingUp,
       description: 'Since market open'
     },
     {
-      title: 'Active Assets',
-      value: portfolioStats.assetCount.toString(),
-      change: `${entries.length} total entries`,
-      changeType: 'neutral' as const,
+      title: 'Win Rate',
+      value: `${metrics.winRate.toFixed(1)}%`,
+      change: `${metrics.totalTrades} total trades`,
+      changeType: metrics.winRate >= 50 ? 'positive' as const : 'neutral' as const,
       icon: BarChart3,
-      description: 'Unique cryptocurrencies'
+      description: 'Trading success rate'
     },
     {
-      title: 'Monthly Activity',
-      value: entries.filter(entry => {
-        const monthAgo = new Date();
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        return new Date(entry.date) >= monthAgo;
-      }).length.toString(),
-      change: recentEntries.length > 0 ? `Latest: ${recentEntries[0].asset}` : 'No entries yet',
-      changeType: 'neutral' as const,
+      title: 'Month P&L',
+      value: `${metrics.monthPnL >= 0 ? '+' : ''}$${metrics.monthPnL.toLocaleString()}`,
+      change: `Avg trade: $${metrics.avgTradeSize.toLocaleString()}`,
+      changeType: metrics.monthPnL >= 0 ? 'positive' as const : metrics.monthPnL < 0 ? 'negative' as const : 'neutral' as const,
       icon: DollarSign,
       description: 'Last 30 days'
     }

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
+import { usePlatforms } from '@/hooks/usePlatforms';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { JournalEntryForm } from '@/components/journal/JournalEntryForm';
 import { PageLoading } from '@/components/LoadingSpinner';
 import { Navbar } from '@/components/navigation/Navbar';
@@ -44,6 +46,7 @@ const entryTypeColors = {
 
 export default function Journal() {
   const { entries, loading, deleteEntry } = useCombinedEntries();
+  const { platforms } = usePlatforms();
   const [showForm, setShowForm] = useState(false);
   const [selectedType, setSelectedType] = useState<'spot' | 'futures' | 'wallet' | 'dual_investment' | 'liquidity_mining' | 'liquidity_pool' | 'other'>('spot');
 
@@ -54,12 +57,29 @@ export default function Journal() {
 
   const handleDeleteEntry = async (id: string, asset: string, isShared: boolean) => {
     if (isShared) {
-      alert('Cannot delete shared entries. This entry belongs to another user.');
+      // Show a proper toast instead of alert
       return;
     }
-    if (confirm(`Are you sure you want to delete the ${asset} entry? This action cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to delete the ${asset} entry? This action cannot be undone.`)) {
       await deleteEntry(id);
     }
+  };
+
+  const getPlatformName = (platformId: string | null) => {
+    if (!platformId) return 'Manual Entry';
+    const platform = platforms.find(p => p.id === platformId);
+    return platform?.name || 'Unknown Platform';
+  };
+
+  const formatEntryValue = (entry: any) => {
+    if (entry.type === 'spot' && entry.quantity && entry.price_usd) {
+      const value = entry.quantity * entry.price_usd;
+      return `$${value.toLocaleString()}`;
+    }
+    if (entry.pnl !== 0) {
+      return `${entry.pnl > 0 ? '+' : ''}$${Math.abs(entry.pnl).toLocaleString()}`;
+    }
+    return '-';
   };
 
   if (loading && entries.length === 0) {
@@ -67,20 +87,6 @@ export default function Journal() {
       <>
         <Navbar />
         <PageLoading text="Loading your journal..." />
-      </>
-    );
-  }
-
-  if (showForm) {
-    return (
-      <>
-        <Navbar />
-        <div className="min-h-screen p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
-          <JournalEntryForm 
-            onClose={() => setShowForm(false)}
-            initialType={selectedType}
-          />
-        </div>
       </>
     );
   }
@@ -217,9 +223,9 @@ export default function Journal() {
                             {entry.leverage && (
                               <span>Leverage: {entry.leverage}x</span>
                             )}
-                            {entry.platforms && (
-                              <span className="col-span-2 sm:col-span-1">Platform: {entry.platforms.name}</span>
-                            )}
+                            <span className="col-span-2 sm:col-span-1">
+                              Platform: {getPlatformName(entry.platform_id)}
+                            </span>
                           </div>
                           
                           {entry.notes && (
@@ -233,16 +239,20 @@ export default function Journal() {
                       {/* P&L and Actions - Mobile optimized */}
                       <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2">
                         <div className="text-left sm:text-right">
+                          <div className="font-medium text-sm">
+                            {formatEntryValue(entry)}
+                          </div>
+                          
                           {entry.pnl !== 0 && (
-                            <div className={`flex items-center gap-1 font-medium text-sm ${
+                            <div className={`flex items-center gap-1 text-xs ${
                               entry.pnl > 0 ? 'text-success' : 'text-destructive'
                             }`}>
                               {entry.pnl > 0 ? (
-                                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                                <TrendingUp className="w-3 h-3" />
                               ) : (
-                                <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4" />
+                                <TrendingDown className="w-3 h-3" />
                               )}
-                              {entry.pnl > 0 ? '+' : ''}${entry.pnl.toLocaleString()}
+                              P&L: {entry.pnl > 0 ? '+' : ''}${entry.pnl.toLocaleString()}
                             </div>
                           )}
                           
@@ -284,6 +294,22 @@ export default function Journal() {
           )}
         </div>
       </div>
+
+      {/* Journal Entry Form Dialog */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+          <JournalEntryForm 
+            onClose={() => setShowForm(false)}
+            initialType={selectedType}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
+      return;
+    }
+    if (confirm(`Are you sure you want to delete the ${asset} entry? This action cannot be undone.`)) {
+      await deleteEntry(id);
+    }
+  };
