@@ -35,9 +35,11 @@ type FormData = z.infer<typeof entrySchema>;
 interface JournalEntryFormProps {
   onClose: () => void;
   initialType?: FormData['type'];
+  initialData?: any;
+  onSubmit?: (data: any) => Promise<void>;
 }
 
-export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntryFormProps) {
+export function JournalEntryForm({ onClose, initialType = 'spot', initialData, onSubmit }: JournalEntryFormProps) {
   const { createEntry, loading } = useJournalEntries();
   const { platforms } = usePlatforms();
   const { toast } = useToast();
@@ -45,7 +47,21 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<FormData>({
     resolver: zodResolver(entrySchema),
-    defaultValues: {
+    defaultValues: initialData ? {
+      type: initialData.type,
+      platform_id: initialData.platform_id || '',
+      date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      asset: initialData.asset || '',
+      quantity: initialData.quantity || 0,
+      price_usd: initialData.price_usd || 0,
+      fees: initialData.fees || 0,
+      pnl: initialData.pnl || 0,
+      side: initialData.side,
+      leverage: initialData.leverage || 1,
+      currency: initialData.currency || 'USD',
+      is_personal: initialData.is_personal || false,
+      notes: initialData.notes || '',
+    } : {
       type: initialType,
       currency: 'USD',
       is_personal: false,
@@ -60,7 +76,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
 
   const watchedType = watch('type');
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmitForm = async (data: FormData) => {
     // Validate required fields based on entry type
     if (data.type === 'spot' && !data.side) {
       toast({
@@ -80,10 +96,10 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
       return;
     }
 
-    const entryData: CreateJournalEntryData = {
+    const entryData = {
       type: data.type!,
       asset: data.asset,
-      date: new Date(data.date).toISOString(),
+      date: data.date,
       platform_id: data.platform_id,
       quantity: data.quantity || 0,
       price_usd: data.price_usd || 0,
@@ -96,9 +112,18 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
       notes: data.notes,
     };
 
-    const { error } = await createEntry(entryData);
-    if (!error) {
+    try {
+      if (onSubmit) {
+        // Edit mode
+        await onSubmit(entryData);
+      } else {
+        // Create mode
+        const { error } = await createEntry(entryData);
+        if (error) return;
+      }
       onClose();
+    } catch (error) {
+      console.error('Form submission error:', error);
     }
   };
 
@@ -109,7 +134,10 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
           <>
             <div className="flex items-center gap-4">
               <Label htmlFor="side" className="w-24 text-sm font-medium text-right shrink-0">Side *</Label>
-              <Select onValueChange={(value) => setValue('side', value as 'buy' | 'sell')}>
+              <Select 
+                value={watch('side') || initialData?.side || ''}
+                onValueChange={(value) => setValue('side', value as 'buy' | 'sell')}
+              >
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select side" />
                 </SelectTrigger>
@@ -149,7 +177,10 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
           <>
             <div className="flex items-center gap-4">
               <Label htmlFor="side" className="w-24 text-sm font-medium text-right shrink-0">Side</Label>
-              <Select onValueChange={(value) => setValue('side', value as 'buy' | 'sell')}>
+              <Select 
+                value={watch('side') || initialData?.side || ''}
+                onValueChange={(value) => setValue('side', value as 'buy' | 'sell')}
+              >
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select side" />
                 </SelectTrigger>
@@ -236,7 +267,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
           </AlertDescription>
         </Alert>
 
-        <form id="journal-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6 pt-4">
+        <form id="journal-form" onSubmit={handleSubmit(onSubmitForm)} className="space-y-6 pt-4">
           <div className="grid grid-cols-1 gap-4">
             <div className="flex items-center gap-4">
               <Label htmlFor="type" className="w-24 text-sm font-medium text-right shrink-0">Entry Type *</Label>
@@ -264,7 +295,10 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
 
             <div className="flex items-center gap-4">
               <Label htmlFor="platform_id" className="w-24 text-sm font-medium text-right shrink-0">Platform</Label>
-              <Select onValueChange={(value) => setValue('platform_id', value)}>
+              <Select 
+                value={watch('platform_id') || initialData?.platform_id || ''}
+                onValueChange={(value) => setValue('platform_id', value)}
+              >
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select platform" />
                 </SelectTrigger>
@@ -322,7 +356,10 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
 
             <div className="flex items-center gap-4">
               <Label htmlFor="currency" className="w-24 text-sm font-medium text-right shrink-0">Currency</Label>
-              <Select onValueChange={(value) => setValue('currency', value as 'USD' | 'PHP')}>
+              <Select 
+                value={watch('currency') || initialData?.currency || 'USD'}
+                onValueChange={(value) => setValue('currency', value as 'USD' | 'PHP')}
+              >
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="USD" />
                 </SelectTrigger>
@@ -350,6 +387,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot' }: JournalEntry
             <div className="flex items-center space-x-2 flex-1">
               <Switch
                 id="is_personal"
+                checked={watch('is_personal') || initialData?.is_personal || false}
                 onCheckedChange={(checked) => setValue('is_personal', checked)}
               />
               <Label htmlFor="is_personal" className="text-sm">
