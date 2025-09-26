@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Navbar } from '@/components/navigation/Navbar';
 import { JournalEntryForm } from '@/components/journal/JournalEntryForm';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
+import { useDataVisibility } from '@/hooks/useDataVisibility';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { Search, Filter, Edit, Trash2, Plus, Users, Eye } from 'lucide-react';
 
 const Journal = () => {
   const { entries, loading, updateEntry, deleteEntry } = useCombinedEntries();
+  const { isSourceVisible, getVisibleSourceIds } = useDataVisibility();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
@@ -21,7 +23,16 @@ const Journal = () => {
   const [showAddForm, setShowAddForm] = useState(false);
 
   const filteredEntries = useMemo(() => {
-    let filtered = entries.filter(entry => {
+    // Enforce visibility again on the page to avoid any leak
+    const visibleGrantIds = getVisibleSourceIds().filter(id => id !== 'own');
+    const visibilityFiltered = entries.filter(entry => {
+      if (entry.isShared) {
+        return entry.grant_id && visibleGrantIds.includes(entry.grant_id);
+      }
+      return isSourceVisible('own');
+    });
+
+    let filtered = visibilityFiltered.filter(entry => {
       const matchesSearch = !searchTerm || 
         entry.asset.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (entry.notes && entry.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -46,9 +57,11 @@ const Journal = () => {
     });
     
     return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [entries, searchTerm, filterType, filterDate]);
+  }, [entries, searchTerm, filterType, filterDate, isSourceVisible, getVisibleSourceIds]);
 
   const handleDelete = async (id: string) => {
+    const entry = entries.find(e => e.id === id);
+    if (!entry || entry.isShared) return; // runtime guard: never delete shared
     await deleteEntry(id);
   };
 
@@ -57,7 +70,7 @@ const Journal = () => {
   };
 
   const handleUpdate = async (updates: any) => {
-    if (editingEntry) {
+    if (editingEntry && !editingEntry.isShared) {
       await updateEntry(editingEntry.id, updates);
       setEditingEntry(null);
     }

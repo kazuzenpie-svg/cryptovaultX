@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -8,8 +8,9 @@ import { DemoDataNotice } from '../components/ui/demo-notice';
 import { usePortfolioMetrics } from '../hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '../hooks/useCombinedEntries';
 import { useDataVisibility } from '../hooks/useDataVisibility';
-import { useCryptoPrices } from '../hooks/useCryptoPrices';
+import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { AssetIcon } from '../components/analytics/AssetIcon';
+import { PriceReloadDropdown } from '@/components/PriceReloadDropdown';
 import { useNavigate } from 'react-router-dom';
 import {
   PieChart,
@@ -90,6 +91,16 @@ export default function Portfolio() {
       .sort((a, b) => b.current_value_usd - a.current_value_usd);
   }, [entries, getAssetPrice, lastUpdated]);
 
+  // Get watched symbols from portfolio
+  const watchedSymbols = useMemo(() => {
+    return [...new Set(portfolio.map(item => item.asset))];
+  }, [portfolio]);
+  
+  // No automatic fetching - manual reload only
+  useEffect(() => {
+    // Prices will be loaded from cache or fetched manually
+  }, []);
+
   if (isLoading) {
     return (
       <>
@@ -141,10 +152,13 @@ export default function Portfolio() {
               )}
             </div>
 
-            <Button onClick={() => updatePortfolioWithLivePrices()} variant="outline" className="w-full sm:w-auto hover-scale">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Update Prices
-            </Button>
+            <PriceReloadDropdown 
+              symbols={watchedSymbols}
+              onReloadSuccess={() => {
+                // Refresh portfolio data after successful reload
+                // This will trigger a re-render with updated prices
+              }}
+            />
           </div>
 
           {/* Portfolio Stats - Responsive Grid */}

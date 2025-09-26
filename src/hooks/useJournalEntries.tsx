@@ -50,6 +50,7 @@ export function useJournalEntries() {
             slug
           )
         `)
+        .eq('user_id', user.id)
         .order('date', { ascending: false });
 
       if (limit) {
@@ -57,7 +58,6 @@ export function useJournalEntries() {
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
       const list = data || [];
       setEntries(list);

@@ -9,15 +9,18 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Navbar } from '@/components/navigation/Navbar';
-import { Settings, Shield, Bell, Palette, User, Database, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, Shield, Bell, Palette, User, Database, Trash2, AlertTriangle, Key } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useToast } from '@/hooks/use-toast';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
   const { profile, updateProfile } = useProfiles();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
+  const { prefs, loading: prefsLoading, error: prefsError, save: savePrefs } = useUserPreferences();
+  const [tokenMetricsKey, setTokenMetricsKey] = useState<string>('');
   const [notifications, setNotifications] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [animations, setAnimations] = useState(true);
@@ -25,6 +28,10 @@ export default function SettingsPage() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(false);
   const [sharingNotifications, setSharingNotifications] = useState(true);
+
+  useEffect(() => {
+    setTokenMetricsKey(prefs.tokenmetrics_api_key ?? '');
+  }, [prefs.tokenmetrics_api_key]);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -94,6 +101,29 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveTokenMetricsKey = async () => {
+    try {
+      await savePrefs({ tokenmetrics_api_key: tokenMetricsKey.trim() || null });
+      toast({
+        title: "API Key Saved! 🔐",
+        description: "Your TokenMetrics API key has been securely stored.",
+        className: "bg-success text-success-foreground",
+      });
+    } catch (error) {
+      toast({
+        title: "Save Failed! ❌",
+        description: "Failed to save your API key. Please try again.",
+        className: "bg-destructive text-destructive-foreground",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Load TokenMetrics API key when prefs change
+  useEffect(() => {
+    setTokenMetricsKey(prefs.tokenmetrics_api_key ?? '');
+  }, [prefs.tokenmetrics_api_key]);
+
   // Don't render theme controls until mounted to prevent hydration mismatch
   if (!mounted) {
     return (
@@ -142,7 +172,7 @@ export default function SettingsPage() {
 
           {/* Settings Tabs - Mobile responsive */}
           <Tabs defaultValue="notifications" className="space-y-4 sm:space-y-6 fade-in" style={{ animationDelay: '0.1s' }}>
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 glass-card h-auto">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 glass-card h-auto">
               <TabsTrigger value="notifications" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 sm:py-3 text-xs sm:text-sm">
                 <Bell className="w-4 h-4" />
                 <span className="hidden sm:inline">Notifications</span>
@@ -162,6 +192,11 @@ export default function SettingsPage() {
                 <Shield className="w-4 h-4" />
                 <span className="hidden sm:inline">Privacy</span>
                 <span className="sm:hidden">Privacy</span>
+              </TabsTrigger>
+              <TabsTrigger value="api" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 sm:py-3 text-xs sm:text-sm">
+                <Key className="w-4 h-4" />
+                <span className="hidden sm:inline">API Keys</span>
+                <span className="sm:hidden">API</span>
               </TabsTrigger>
             </TabsList>
 
@@ -472,8 +507,61 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             </TabsContent>
-          </Tabs>
 
+            <TabsContent value="api" className="fade-in" style={{ animationDelay: '0.2s' }}>
+              <Card className="glass-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                    <Key className="w-5 h-5 text-primary" />
+                    API Key Management
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <Key className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-800 dark:text-blue-200">
+                      <strong>Secure Storage:</strong> Your API keys are encrypted and stored securely in Supabase with Row Level Security. 
+                      They are only accessible by you and used for fetching real-time price data.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">TokenMetrics API Key</Label>
+                        <p className="text-xs text-muted-foreground mt-1 mb-3">
+                          Used for fetching real-time cryptocurrency prices
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="password"
+                            className="flex-1 px-3 py-2 bg-background/60 border border-border rounded-md iPhone-input"
+                            placeholder="tm-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                            value={tokenMetricsKey}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenMetricsKey(e.target.value)}
+                          />
+                          <Button 
+                            onClick={handleSaveTokenMetricsKey}
+                            disabled={prefsLoading}
+                            size="sm"
+                          >
+                            Save
+                          </Button>
+                        </div>
+                        {prefsError && (
+                          <p className="text-xs text-destructive mt-2">{prefsError}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Note: TokenMetrics plans have monthly limits. Keys are stored per-user with Row Level Security.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+          </Tabs>
 
         </div>
       </div>

@@ -48,8 +48,8 @@ export function usePortfolioMetrics() {
       };
     }
 
-    // Calculate portfolio holdings from spot and wallet entries
-    const holdings = new Map<string, {
+    // Calculate portfolio holding from spot and wallet entries
+    const holding = new Map<string, {
       quantity: number;
       avgPrice: number;
       totalCost: number;
@@ -58,7 +58,7 @@ export function usePortfolioMetrics() {
 
     entries.forEach(entry => {
       if (entry.type === 'spot' || entry.type === 'wallet') {
-        const current = holdings.get(entry.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, pnl: 0 };
+        const current = holding.get(entry.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, pnl: 0 };
         
         if (entry.type === 'spot' && entry.quantity && entry.price_usd) {
           const quantity = entry.side === 'buy' ? entry.quantity : -entry.quantity;
@@ -81,7 +81,7 @@ export function usePortfolioMetrics() {
         }
         
         current.pnl += entry.pnl;
-        holdings.set(entry.asset, current);
+        holding.set(entry.asset, current);
       }
     });
 
@@ -90,7 +90,7 @@ export function usePortfolioMetrics() {
     let totalCostBasis = 0;
     let unrealizedPnL = 0;
     
-    holdings.forEach((holding, asset) => {
+    holding.forEach((holding, asset) => {
       if (holding.quantity > 0) {
         const currentPrice = getAssetPrice(asset) || holding.avgPrice;
         const currentValue = holding.quantity * currentPrice;
@@ -129,7 +129,7 @@ export function usePortfolioMetrics() {
     const realizedDay = entries
       .filter(e => new Date(e.date) >= dayAgo)
       .reduce((sum, e) => sum + (e.pnl || 0), 0);
-    const unrealizedDay = Array.from(holdings.entries())
+    const unrealizedDay = Array.from(holding.entries())
       .reduce((sum, [asset, holding]) => sum + ((getAssetChange(asset) || 0) * holding.quantity), 0);
     const dayPnL = realizedDay + unrealizedDay;
 
@@ -182,7 +182,7 @@ export function usePortfolioMetrics() {
       dayPnL,
       weekPnL,
       monthPnL,
-      assetCount: holdings.size,
+      assetCount: holding.size,
       totalTrades: trades.length,
       winRate,
       avgTradeSize,
@@ -190,7 +190,7 @@ export function usePortfolioMetrics() {
       worstPerformer,
       lastUpdated
     };
-  }, [entries, getAssetPrice, lastUpdated]);
+  }, [entries, getAssetPrice, getAssetChange, lastUpdated]);
 
   useEffect(() => {
     setLoading(entriesLoading);

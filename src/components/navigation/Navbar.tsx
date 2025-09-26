@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -12,17 +12,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { 
+import {
   Menu,
   Home,
   BookOpen,
   PieChart,
   BarChart3,
-  Settings,
+  Settings as SettingsIcon,
   Share2,
   LogOut,
   User,
-  Wallet
+  Wallet,
+  Info,
 } from 'lucide-react';
 
 const navigation = [
@@ -48,8 +49,8 @@ export function Navbar() {
       to={item.href}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 hover-scale ${
-          isActive 
-            ? 'bg-primary text-primary-foreground shadow-lg' 
+          isActive
+            ? 'bg-primary text-primary-foreground shadow-lg'
             : 'text-muted-foreground hover:text-foreground hover:bg-accent'
         } ${mobile ? 'text-base' : 'text-sm'}`
       }
@@ -60,15 +61,12 @@ export function Navbar() {
     </NavLink>
   );
 
-  // Mobile Bottom Nav Item
   const BottomNavItem = ({ item }: { item: typeof navigation[0] }) => (
     <NavLink
       to={item.href}
       className={({ isActive }) =>
         `flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 ${
-          isActive 
-            ? 'text-primary' 
-            : 'text-muted-foreground'
+          isActive ? 'text-primary' : 'text-muted-foreground'
         }`
       }
     >
@@ -117,24 +115,33 @@ export function Navbar() {
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">Account</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user.email}
-                  </p>
+                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+
               <DropdownMenuItem asChild>
                 <NavLink to="/profile" className="flex items-center gap-2 cursor-pointer">
                   <User className="w-4 h-4" />
                   Profile
                 </NavLink>
               </DropdownMenuItem>
+
               <DropdownMenuItem asChild>
                 <NavLink to="/settings" className="flex items-center gap-2 cursor-pointer">
-                  <Settings className="w-4 h-4" />
+                  <SettingsIcon className="w-4 h-4" />
                   Settings
                 </NavLink>
               </DropdownMenuItem>
+
+              {/* About below Settings */}
+              <DropdownMenuItem asChild>
+                <NavLink to="/about" className="flex items-center gap-2 cursor-pointer">
+                  <Info className="w-4 h-4" />
+                  About
+                </NavLink>
+              </DropdownMenuItem>
+
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
                 <LogOut className="w-4 h-4 mr-2" />
@@ -145,7 +152,7 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* Mobile Top Header (minimal) */}
+      {/* Mobile Top Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden block">
         <div className="flex h-16 items-center justify-between px-4">
           {/* Logo */}
@@ -174,24 +181,33 @@ export function Navbar() {
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">Account</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user.email}
-                  </p>
+                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+
               <DropdownMenuItem asChild>
                 <NavLink to="/profile" className="flex items-center gap-2 cursor-pointer">
                   <User className="w-4 h-4" />
                   Profile
                 </NavLink>
               </DropdownMenuItem>
+
               <DropdownMenuItem asChild>
                 <NavLink to="/settings" className="flex items-center gap-2 cursor-pointer">
-                  <Settings className="w-4 h-4" />
+                  <SettingsIcon className="w-4 h-4" />
                   Settings
                 </NavLink>
               </DropdownMenuItem>
+
+              {/* About below Settings */}
+              <DropdownMenuItem asChild>
+                <NavLink to="/about" className="flex items-center gap-2 cursor-pointer">
+                  <Info className="w-4 h-4" />
+                  About
+                </NavLink>
+              </DropdownMenuItem>
+
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
                 <LogOut className="w-4 h-4 mr-2" />

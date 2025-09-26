@@ -1,10 +1,13 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { tokenRefreshService } from "@/services/tokenRefreshService";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -14,9 +17,57 @@ import Analytics from "./pages/Analytics";
 import Profile from "./pages/Profile";
 import Sharing from "./pages/Sharing";
 import Settings from "./pages/Settings";
+import TokenMetricsTestPage from "./pages/TokenMetricsTestPage";
+import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// Component to track user activity only
+const ActivityTracker = () => {
+  // Track user activity
+  useEffect(() => {
+    const updateActivity = () => {
+      localStorage.setItem('lastActivity', Date.now().toString());
+    };
+    
+    // Update activity on mouse move, key press, and touch
+    window.addEventListener('mousemove', updateActivity);
+    window.addEventListener('keydown', updateActivity);
+    window.addEventListener('touchstart', updateActivity);
+    
+    // Initial activity update
+    updateActivity();
+    
+    return () => {
+      window.removeEventListener('mousemove', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('touchstart', updateActivity);
+    };
+  }, []);
+  
+  return null;
+};
+
+const AppContent = () => (
+  <>
+    <ActivityTracker />
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/journal" element={<Journal />} />
+      <Route path="/portfolio" element={<Portfolio />} />
+      <Route path="/analytics" element={<Analytics />} />
+      <Route path="/profile" element={<Profile />} />
+      <Route path="/sharing" element={<Sharing />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/test/tokenmetrics" element={<TokenMetricsTestPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  </>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,18 +82,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/journal" element={<Journal />} />
-            <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/sharing" element={<Sharing />} />
-            <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppContent />
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>

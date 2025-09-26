@@ -15,6 +15,12 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/cg/, ""),
       },
+      // CoinGecko PRO API proxy (dev only)
+      "/cgpro": {
+        target: "https://pro-api.coingecko.com",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/cgpro/, ""),
+      },
       // Binance API proxy (dev only)
       "/binance": {
         target: "https://api.binance.com",
