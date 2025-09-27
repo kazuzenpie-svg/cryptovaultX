@@ -10,12 +10,7 @@ import { QuickActions } from '@/components/dashboard/QuickActions';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { Navbar } from '@/components/navigation/Navbar';
 import { formatDistanceToNow } from 'date-fns';
-import { 
-  Wallet, 
-  TrendingUp,
-  BarChart3, 
-  DollarSign
-} from 'lucide-react';
+import { Wallet, TrendingUp, ChartBar as BarChart3, DollarSign } from 'lucide-react';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { TokenMetricsWidget } from '@/components/tokenmetrics/TokenMetricsWidget';
 import { useEnhancedCryptoPrices } from '@/hooks/useEnhancedCryptoPrices';

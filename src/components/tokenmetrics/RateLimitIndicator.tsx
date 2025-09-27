@@ -2,7 +2,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useTokenMetricsApi } from '@/hooks/useTokenMetricsApi';
-import { Clock, Zap, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Clock, Zap, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle } from 'lucide-react';
 
 interface RateLimitIndicatorProps {
   className?: string;

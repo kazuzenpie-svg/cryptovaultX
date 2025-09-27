@@ -9,19 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetricsApi } from '@/hooks/useTokenMetricsApi';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { 
-  TrendingUp, 
-  RefreshCw, 
-  Clock, 
-  Database, 
-  AlertTriangle, 
-  CheckCircle,
-  Trash2,
-  Activity,
-  DollarSign,
-  BarChart3,
-  Zap
-} from 'lucide-react';
+import { TrendingUp, RefreshCw, Clock, Database, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Trash2, Activity, DollarSign, ChartBar as BarChart3, Zap } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export function TokenMetricsPanel() {

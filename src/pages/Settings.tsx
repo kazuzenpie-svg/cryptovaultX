@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Navbar } from '@/components/navigation/Navbar';
-import { Settings, Shield, Bell, Palette, User, Database, Trash2, AlertTriangle, Key } from 'lucide-react';
+import { Settings, Shield, Bell, Palette, User, Database, Trash2, TriangleAlert as AlertTriangle, Key } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useToast } from '@/hooks/use-toast';
 import { useUserPreferences } from '@/hooks/useUserPreferences';

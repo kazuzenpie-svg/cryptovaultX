@@ -12,18 +12,7 @@ import { useEnhancedCryptoPrices } from '@/hooks/useEnhancedCryptoPrices';
 import { AssetIcon } from '../components/analytics/AssetIcon';
 import { TokenMetricsWidget } from '@/components/tokenmetrics/TokenMetricsWidget';
 import { useNavigate } from 'react-router-dom';
-import {
-  PieChart,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  RefreshCw,
-  Eye,
-  DollarSign,
-  BarChart3,
-  Users,
-  Database
-} from 'lucide-react';
+import { ChartPie as PieChart, TrendingUp, TrendingDown, Wallet, RefreshCw, Eye, DollarSign, ChartBar as BarChart3, Users, Database } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Portfolio() {

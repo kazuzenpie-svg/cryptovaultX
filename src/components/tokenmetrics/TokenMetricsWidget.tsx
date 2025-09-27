@@ -4,14 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTokenMetricsApi } from '@/hooks/useTokenMetricsApi';
 import { CryptoIcon } from '@/components/CryptoIcon';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  RefreshCw, 
-  Clock,
-  AlertTriangle,
-  DollarSign
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, Clock, TriangleAlert as AlertTriangle, DollarSign } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface TokenMetricsWidgetProps {

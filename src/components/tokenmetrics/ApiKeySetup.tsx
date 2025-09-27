@@ -6,16 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Key, 
-  Eye, 
-  EyeOff, 
-  CheckCircle, 
-  AlertTriangle, 
-  ExternalLink,
-  Shield,
-  Info
-} from 'lucide-react';
+import { Key, Eye, EyeOff, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, ExternalLink, Shield, Info } from 'lucide-react';
 
 export function ApiKeySetup() {
   const { prefs, loading, error, save } = useUserPreferences();
