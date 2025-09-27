@@ -13,6 +13,8 @@ import { Settings, Shield, Bell, Palette, User, Database, Trash2, AlertTriangle,
 import { useTheme } from 'next-themes';
 import { useToast } from '@/hooks/use-toast';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { ApiKeySetup } from '@/components/tokenmetrics/ApiKeySetup';
+import { TokenMetricsPanel } from '@/components/tokenmetrics/TokenMetricsPanel';
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
@@ -509,56 +511,10 @@ export default function SettingsPage() {
             </TabsContent>
 
             <TabsContent value="api" className="fade-in" style={{ animationDelay: '0.2s' }}>
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                    <Key className="w-5 h-5 text-primary" />
-                    API Key Management
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                    <Key className="h-4 w-4 text-blue-600" />
-                    <AlertDescription className="text-blue-800 dark:text-blue-200">
-                      <strong>Secure Storage:</strong> Your API keys are encrypted and stored securely in Supabase with Row Level Security. 
-                      They are only accessible by you and used for fetching real-time price data.
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="space-y-3">
-                    <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">TokenMetrics API Key</Label>
-                        <p className="text-xs text-muted-foreground mt-1 mb-3">
-                          Used for fetching real-time cryptocurrency prices
-                        </p>
-                        <div className="flex gap-2">
-                          <input
-                            type="password"
-                            className="flex-1 px-3 py-2 bg-background/60 border border-border rounded-md iPhone-input"
-                            placeholder="tm-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                            value={tokenMetricsKey}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenMetricsKey(e.target.value)}
-                          />
-                          <Button 
-                            onClick={handleSaveTokenMetricsKey}
-                            disabled={prefsLoading}
-                            size="sm"
-                          >
-                            Save
-                          </Button>
-                        </div>
-                        {prefsError && (
-                          <p className="text-xs text-destructive mt-2">{prefsError}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Note: TokenMetrics plans have monthly limits. Keys are stored per-user with Row Level Security.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="space-y-6">
+                <ApiKeySetup />
+                <TokenMetricsPanel />
+              </div>
             </TabsContent>
 
           </Tabs>

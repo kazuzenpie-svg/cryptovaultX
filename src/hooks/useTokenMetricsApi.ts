@@ -1,74 +1,240 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { tokenMetricsApi, type TokenMetricsToken, type RateLimitInfo } from '@/services/tokenMetricsApiService';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { useToast } from '@/hooks/use-toast';
 
 export interface UseTokenMetricsApiResult {
-  connected: boolean; // last fetch succeeded recently
-  lastUpdated?: number;
-  getPrice: (symbol: string) => number | undefined;
-  error?: string;
+  // Data
+  tokens: TokenMetricsToken[];
+  prices: Record<string, number>;
+  
+  // State
+  loading: boolean;
+  error: string | null;
+  
+  // Rate limiting
+  rateLimitInfo: RateLimitInfo;
+  
+  // Cache info
+  cacheStats: {
+    priceCount: number;
+    tokenCount: number;
+    totalSize: number;
+    lastUpdate: Date | null;
+  };
+  
+  // Methods
+  fetchTokens: (symbols?: string[]) => Promise<void>;
+  refreshPrices: (symbols: string[]) => Promise<void>;
+  getPrice: (symbol: string) => number | null;
+  getTokenData: (symbol: string) => TokenMetricsToken | null;
+  clearCache: () => void;
+  healthCheck: () => Promise<any>;
 }
 
-/**
- * Poll TokenMetrics REST API for latest token prices by symbol.
- * - symbols: symbols without suffix (e.g., ['BTC','XRP','OM'])
- * - apiKey: TokenMetrics API key
- * - intervalMs: polling interval (default 15000ms)
- */
-export function useTokenMetricsApi(symbols: string[], apiKey?: string, intervalMs: number = 15000): UseTokenMetricsApiResult {
-  const norm = useMemo(() => Array.from(new Set((symbols || [])
-    .map(s => (s || '').toUpperCase().replace(/\/(USDT|USD)$/,'').trim())
-    .filter(Boolean)
-  )), [symbols]);
+export function useTokenMetricsApi(autoFetch: boolean = false): UseTokenMetricsApiResult {
+  const { prefs } = useUserPreferences();
+  const { toast } = useToast();
+  
+  const [tokens, setTokens] = useState<TokenMetricsToken[]>([]);
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo>({
+    canMakeCall: true,
+    timeUntilNext: 0,
+    callsRemaining: 100,
+    resetTime: new Date()
+  });
+  const [cacheStats, setCacheStats] = useState({
+    priceCount: 0,
+    tokenCount: 0,
+    totalSize: 0,
+    lastUpdate: null as Date | null
+  });
 
-  const pricesRef = useRef<Map<string, number>>(new Map());
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [lastUpdated, setLastUpdated] = useState<number | undefined>(undefined);
-
-  const fetchAll = useCallback(async (abort?: AbortSignal) => {
-    if (!apiKey || norm.length === 0) return;
-    try {
-      setError(undefined);
-      // Fetch per symbol (TokenMetrics sample shows single symbol per call)
-      const outEntries: Array<[string, number]> = [];
-      await Promise.all(norm.map(async (sym) => {
-        const url = `https://api.tokenmetrics.com/v3/tokens?symbol=${encodeURIComponent(sym)}&limit=1&page=1`;
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: { 'accept': 'application/json', 'x-api-key': apiKey },
-          signal: abort,
-        });
-        if (!res.ok) throw new Error(`${sym} ${res.status}`);
-        const data = await res.json().catch(() => ({} as any));
-        // Try to extract price field heuristically
-        // Expected: data.data[0]?.price_usd or .price
-        const item = (data?.data && Array.isArray(data.data) && data.data[0]) || undefined;
-        const price = Number(item?.price_usd ?? item?.price ?? item?.last_price);
-        if (Number.isFinite(price)) {
-          outEntries.push([sym, price]);
-        }
-      }));
-      if (outEntries.length > 0) {
-        for (const [sym, px] of outEntries) pricesRef.current.set(sym + 'USDT', px);
-        setConnected(true);
-        setLastUpdated(Date.now());
-      }
-    } catch (e: any) {
-      setConnected(false);
-      setError(e?.message || 'TokenMetrics fetch failed');
-    }
-  }, [apiKey, norm]);
-
+  // Update API key when preferences change
   useEffect(() => {
-    const ctrl = new AbortController();
-    fetchAll(ctrl.signal);
-    const t = setInterval(() => fetchAll(ctrl.signal), intervalMs) as unknown as number;
-    return () => { try { ctrl.abort(); } catch {}; clearInterval(t); };
-  }, [fetchAll, intervalMs]);
+    if (prefs.tokenmetrics_api_key) {
+      tokenMetricsApi.setApiKey(prefs.tokenmetrics_api_key);
+    }
+  }, [prefs.tokenmetrics_api_key]);
 
-  const getPrice = useCallback((symbol: string) => {
-    const key = (symbol || '').toUpperCase().replace(/\/(USDT|USD)$/,'') + 'USDT';
-    return pricesRef.current.get(key);
+  // Update rate limit info and cache stats
+  const updateStatus = useCallback(() => {
+    setRateLimitInfo(tokenMetricsApi.getRateLimitInfo());
+    setCacheStats(tokenMetricsApi.getCacheStats());
   }, []);
 
-  return { connected, lastUpdated, getPrice, error };
+  // Update status on mount and periodically
+  useEffect(() => {
+    updateStatus();
+    const interval = setInterval(updateStatus, 10000); // Update every 10 seconds
+    return () => clearInterval(interval);
+  }, [updateStatus]);
+
+  // Fetch tokens with error handling
+  const fetchTokens = useCallback(async (symbols?: string[]) => {
+    if (!prefs.tokenmetrics_api_key) {
+      setError('API key not configured. Please set your TokenMetrics API key in Settings.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await tokenMetricsApi.fetchTokens(symbols);
+      setTokens(response.data);
+      
+      // Update prices from response
+      const newPrices: Record<string, number> = {};
+      response.data.forEach(token => {
+        if (token.token_symbol) {
+          const symbol = token.token_symbol.toUpperCase();
+          const price = token.current_price || token.price || token.price_usd || 0;
+          if (price > 0) {
+            newPrices[symbol] = price;
+          }
+        }
+      });
+      setPrices(newPrices);
+      
+      // Update database
+      if (Object.keys(newPrices).length > 0) {
+        await tokenMetricsApi.updateDatabasePrices(Object.keys(newPrices));
+      }
+      
+      updateStatus();
+      
+      toast({
+        title: "Prices Updated! 📈",
+        description: `Successfully fetched ${response.data.length} token prices.`,
+        className: "bg-success text-success-foreground",
+      });
+      
+    } catch (error: any) {
+      console.error('Error fetching tokens:', error);
+      setError(error.message);
+      
+      toast({
+        title: "Fetch Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      updateStatus();
+    }
+  }, [prefs.tokenmetrics_api_key, toast, updateStatus]);
+
+  // Refresh prices for specific symbols
+  const refreshPrices = useCallback(async (symbols: string[]) => {
+    if (!symbols.length) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const newPrices = await tokenMetricsApi.getPrices(symbols);
+      setPrices(prev => ({ ...prev, ...newPrices }));
+      
+      // Update database
+      await tokenMetricsApi.updateDatabasePrices(symbols);
+      
+      updateStatus();
+      
+      toast({
+        title: "Prices Refreshed! 🔄",
+        description: `Updated prices for ${Object.keys(newPrices).length} symbols.`,
+        className: "bg-success text-success-foreground",
+      });
+      
+    } catch (error: any) {
+      console.error('Error refreshing prices:', error);
+      setError(error.message);
+      
+      toast({
+        title: "Refresh Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      updateStatus();
+    }
+  }, [toast, updateStatus]);
+
+  // Get price for symbol
+  const getPrice = useCallback((symbol: string): number | null => {
+    return tokenMetricsApi.getPrice(symbol);
+  }, []);
+
+  // Get token data
+  const getTokenData = useCallback((symbol: string): TokenMetricsToken | null => {
+    return tokenMetricsApi.getTokenData(symbol);
+  }, []);
+
+  // Clear cache
+  const clearCache = useCallback(() => {
+    tokenMetricsApi.clearCache();
+    setTokens([]);
+    setPrices({});
+    updateStatus();
+    
+    toast({
+      title: "Cache Cleared! 🧹",
+      description: "All TokenMetrics cache data has been removed.",
+      className: "bg-warning text-warning-foreground",
+    });
+  }, [toast, updateStatus]);
+
+  // Health check
+  const healthCheck = useCallback(async () => {
+    return await tokenMetricsApi.healthCheck();
+  }, []);
+
+  // Load cached data on mount
+  useEffect(() => {
+    const cached = tokenMetricsApi.getCachedResponse();
+    if (cached?.data) {
+      setTokens(cached.data);
+      
+      // Extract prices from cached data
+      const cachedPrices: Record<string, number> = {};
+      cached.data.forEach((token: TokenMetricsToken) => {
+        if (token.token_symbol) {
+          const symbol = token.token_symbol.toUpperCase();
+          const price = token.current_price || token.price || token.price_usd || 0;
+          if (price > 0) {
+            cachedPrices[symbol] = price;
+          }
+        }
+      });
+      setPrices(cachedPrices);
+    }
+    updateStatus();
+  }, [updateStatus]);
+
+  // Auto-fetch if enabled and API key is available
+  useEffect(() => {
+    if (autoFetch && prefs.tokenmetrics_api_key && rateLimitInfo.canMakeCall) {
+      fetchTokens();
+    }
+  }, [autoFetch, prefs.tokenmetrics_api_key, fetchTokens]);
+
+  return {
+    tokens,
+    prices,
+    loading,
+    error,
+    rateLimitInfo,
+    cacheStats,
+    fetchTokens,
+    refreshPrices,
+    getPrice,
+    getTokenData,
+    clearCache,
+    healthCheck
+  };
 }

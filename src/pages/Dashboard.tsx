@@ -17,37 +17,33 @@ import {
   DollarSign
 } from 'lucide-react';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { TokenMetricsFetcher } from '@/components/TokenMetricsFetcher';
-import { useTokenMetricsData } from '@/hooks/useTokenMetricsData';
-import { PriceReloadDropdown } from '@/components/PriceReloadDropdown';
+import { TokenMetricsWidget } from '@/components/tokenmetrics/TokenMetricsWidget';
+import { useEnhancedCryptoPrices } from '@/hooks/useEnhancedCryptoPrices';
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const { metrics, loading: metricsLoading } = usePortfolioMetrics();
   const { entries } = useCombinedEntries();
   const navigate = useNavigate();
-  const { prefs } = useUserPreferences();
-  const [prices, setPrices] = useState<Record<string, number>>({});
-  const [lastPriceUpdate, setLastPriceUpdate] = useState<number | null>(null);
+  const {
+    prices,
+    watchedSymbols,
+    lastUpdate,
+    loading: pricesLoading,
+    getAssetPrice,
+    manualRefresh
+  } = useEnhancedCryptoPrices();
 
   useEffect(() => {
   }, [user, loading, navigate]);
 
-  // Get symbols from entries
-  const watchedSymbols = [...new Set(
-    entries
-      .filter(e => e.type === 'spot' || e.type === 'wallet')
-      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
-  )];
-  const handlePriceUpdate = (newPrices: Record<string, number>) => {
-    setPrices(newPrices);
-    setLastPriceUpdate(Date.now());
+  const handlePriceRefresh = async () => {
+    try {
+      await manualRefresh();
+    } catch (error: any) {
+      console.error('Price refresh failed:', error);
+    }
   };
-
-  // No automatic fetching - manual reload only
-  useEffect(() => {
-    // Prices will be loaded from cache or fetched manually
-  }, []);
 
   if (loading || metricsLoading) {
     return <PageLoading text="Loading dashboard..." />;
@@ -99,7 +95,6 @@ export default function Dashboard() {
   return (
     <>
       <Navbar />
-      <TokenMetricsFetcher symbols={watchedSymbols} onPricesUpdate={handlePriceUpdate} />
       <div className="min-h-screen p-2 sm:p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
           {/* TokenMetrics Pricing Only */}
@@ -119,12 +114,12 @@ export default function Dashboard() {
             </div>
 
             {/* Live Price Update Indicator - Compact */}
-            {lastPriceUpdate && (
+            {lastUpdate && (
               <div className="flex items-center justify-center py-1 fade-in" style={{ animationDelay: '0.5s' }}>
                 <div className="flex items-center gap-2 px-3 py-1 bg-success/10 text-success rounded-full text-xs sm:text-sm">
                   <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
                   <span className="hidden sm:inline">
-                    Prices updated {formatDistanceToNow(new Date(lastPriceUpdate), { addSuffix: true })}
+                    Prices updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}
                   </span>
                   <span className="sm:hidden">
                     Prices live
@@ -134,37 +129,13 @@ export default function Dashboard() {
             )}
             
             {/* Current Prices for Held Assets */}
-            {entries.length > 0 && (
+            {watchedSymbols.length > 0 && (
               <div className="fade-in" style={{ animationDelay: '0.55s' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg sm:text-xl font-semibold">Current Prices</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">USD (USDT)</span>
-                    <PriceReloadDropdown 
-                      symbols={watchedSymbols}
-                      onReloadSuccess={() => setLastPriceUpdate(Date.now())}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                  {Array.from(new Set(
-                    entries
-                      .filter(e => e.type === 'spot' || e.type === 'wallet')
-                      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,'') )
-                  )).map((symbol) => {
-                    const price = prices[symbol];
-                    return (
-                      <div key={symbol} className="glass-card p-3 sm:p-4">
-                        <div className="flex items-baseline justify-between">
-                          <div className="font-medium">{symbol}</div>
-                        </div>
-                        <div className="mt-1 text-sm sm:text-base font-semibold">
-                          {typeof price === 'number' ? `$${price.toLocaleString()}` : '—'}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <TokenMetricsWidget 
+                  symbols={watchedSymbols}
+                  title="Portfolio Prices"
+                  compact={false}
+                />
               </div>
             )}
             
