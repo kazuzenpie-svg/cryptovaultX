@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useCombinedEntries } from './useCombinedEntries';
-import { useCryptoPrices } from './useCryptoPrices';
+import { useBinanceAnalyticsPrices } from '@/hooks/useBinanceAnalyticsPrices';
 import { useAuth } from './useAuth';
 
 export interface PortfolioMetrics {
@@ -24,7 +24,12 @@ export interface PortfolioMetrics {
 export function usePortfolioMetrics() {
   const { user } = useAuth();
   const { entries, loading: entriesLoading } = useCombinedEntries();
-  const { getAssetPrice, getAssetChange, lastUpdated } = useCryptoPrices();
+  // Compute the list of symbols we need pricing for
+  const symbols = Array.from(new Set(entries
+    .filter(e => e.type === 'spot' || e.type === 'wallet')
+    .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+  ));
+  const { getAssetPrice, getAssetChangePct } = useBinanceAnalyticsPrices(symbols);
   const [loading, setLoading] = useState(true);
 
   const metrics = useMemo((): PortfolioMetrics => {
@@ -44,7 +49,7 @@ export function usePortfolioMetrics() {
         avgTradeSize: 0,
         bestPerformer: null,
         worstPerformer: null,
-        lastUpdated: lastUpdated
+        lastUpdated: null
       };
     }
 
@@ -130,7 +135,12 @@ export function usePortfolioMetrics() {
       .filter(e => new Date(e.date) >= dayAgo)
       .reduce((sum, e) => sum + (e.pnl || 0), 0);
     const unrealizedDay = Array.from(holding.entries())
-      .reduce((sum, [asset, holding]) => sum + ((getAssetChange(asset) || 0) * holding.quantity), 0);
+      .reduce((sum, [asset, holding]) => {
+        const price = getAssetPrice(asset) || 0;
+        const pct = getAssetChangePct(asset) || 0; // percent over 24h
+        const delta = price * (pct / 100);
+        return sum + (delta * holding.quantity);
+      }, 0);
     const dayPnL = realizedDay + unrealizedDay;
 
     // Week/Month PnL = realized within window (no historical price available for unrealized change)
@@ -188,9 +198,9 @@ export function usePortfolioMetrics() {
       avgTradeSize,
       bestPerformer,
       worstPerformer,
-      lastUpdated
+      lastUpdated: null
     };
-  }, [entries, getAssetPrice, getAssetChange, lastUpdated]);
+  }, [entries, getAssetPrice, getAssetChangePct]);
 
   useEffect(() => {
     setLoading(entriesLoading);

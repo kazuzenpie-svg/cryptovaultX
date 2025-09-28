@@ -13,6 +13,7 @@ import { Settings, Shield, Bell, Palette, User, Database, Trash2, AlertTriangle,
 import { useTheme } from 'next-themes';
 import { useToast } from '@/hooks/use-toast';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
@@ -28,6 +29,12 @@ export default function SettingsPage() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(false);
   const [sharingNotifications, setSharingNotifications] = useState(true);
+  // Binance credentials UI state
+  const [binanceApiKey, setBinanceApiKey] = useState('');
+  const [binanceApiSecret, setBinanceApiSecret] = useState('');
+  const [binanceHasCreds, setBinanceHasCreds] = useState<boolean | null>(null);
+  const [binanceUpdatedAt, setBinanceUpdatedAt] = useState<string | null>(null);
+  const [binanceSaving, setBinanceSaving] = useState(false);
 
   useEffect(() => {
     setTokenMetricsKey(prefs.tokenmetrics_api_key ?? '');
@@ -56,6 +63,19 @@ export default function SettingsPage() {
     }
   }, [notifications, compactMode, animations, mounted]);
 
+  // Load Binance creds status
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_binance_credentials_status');
+        if (!error && data) {
+          setBinanceHasCreds(!!data.has_credentials);
+          setBinanceUpdatedAt(data.updated_at ?? null);
+        }
+      } catch {}
+    })();
+  }, []);
+
   const clearCache = () => {
     if (window.confirm('This will clear all cached data and reload the app. Continue?')) {
       localStorage.clear();
@@ -66,6 +86,70 @@ export default function SettingsPage() {
         className: "bg-success text-success-foreground",
       });
       setTimeout(() => window.location.reload(), 1000);
+    }
+  };
+
+  const handleSaveBinanceCreds = async () => {
+    if (!binanceApiKey.trim() || !binanceApiSecret.trim()) {
+      toast({
+        title: 'Missing fields',
+        description: 'Enter both API Key and Secret.',
+        className: 'bg-destructive text-destructive-foreground',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setBinanceSaving(true);
+    try {
+      const { error } = await supabase.rpc('set_binance_credentials', {
+        p_api_key: binanceApiKey.trim(),
+        p_api_secret: binanceApiSecret.trim(),
+      });
+      if (error) throw error;
+      setBinanceHasCreds(true);
+      setBinanceUpdatedAt(new Date().toISOString());
+      setBinanceApiSecret(''); // never keep secret in memory longer than needed
+      toast({
+        title: 'Binance credentials saved',
+        description: 'Stored securely with RLS and encryption.',
+        className: 'bg-success text-success-foreground',
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Save failed',
+        description: e?.message || 'Could not save credentials.',
+        className: 'bg-destructive text-destructive-foreground',
+        variant: 'destructive',
+      });
+    } finally {
+      setBinanceSaving(false);
+    }
+  };
+
+  const handleDeleteBinanceCreds = async () => {
+    if (!window.confirm('Remove your stored Binance credentials?')) return;
+    setBinanceSaving(true);
+    try {
+      const { error } = await supabase.rpc('delete_binance_credentials');
+      if (error) throw error;
+      setBinanceHasCreds(false);
+      setBinanceUpdatedAt(null);
+      setBinanceApiKey('');
+      setBinanceApiSecret('');
+      toast({
+        title: 'Binance credentials removed',
+        description: 'You can add them again anytime.',
+        className: 'bg-success text-success-foreground',
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Remove failed',
+        description: e?.message || 'Could not remove credentials.',
+        className: 'bg-destructive text-destructive-foreground',
+        variant: 'destructive',
+      });
+    } finally {
+      setBinanceSaving(false);
     }
   };
 
@@ -553,6 +637,46 @@ export default function SettingsPage() {
                         )}
                         <p className="text-xs text-muted-foreground mt-2">
                           Note: TokenMetrics plans have monthly limits. Keys are stored per-user with Row Level Security.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Binance Credentials */}
+                    <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Binance API Credentials</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Stored encrypted in Supabase; only you can access them. Secrets are never returned to the client.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                          <input
+                            type="password"
+                            className="px-3 py-2 bg-background/60 border border-border rounded-md iPhone-input"
+                            placeholder="API Key"
+                            value={binanceApiKey}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBinanceApiKey(e.target.value)}
+                            autoComplete="off"
+                          />
+                          <input
+                            type="password"
+                            className="px-3 py-2 bg-background/60 border border-border rounded-md iPhone-input"
+                            placeholder="Secret Key"
+                            value={binanceApiSecret}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBinanceApiSecret(e.target.value)}
+                            autoComplete="off"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Button onClick={handleSaveBinanceCreds} disabled={binanceSaving} size="sm">Save</Button>
+                          <Button onClick={handleDeleteBinanceCreds} disabled={binanceSaving || !binanceHasCreds} size="sm" variant="outline">Remove</Button>
+                          {binanceHasCreds !== null && (
+                            <span className="text-xs text-muted-foreground">
+                              {binanceHasCreds ? `Set${binanceUpdatedAt ? ` • updated ${new Date(binanceUpdatedAt).toLocaleString()}` : ''}` : 'Not set'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Tip: Create a read-only API key in Binance and restrict IPs where possible.
                         </p>
                       </div>
                     </div>

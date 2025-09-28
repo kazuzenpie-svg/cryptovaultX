@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+// import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { usePortfolioMetrics } from '@/hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { PageLoading } from '@/components/LoadingSpinner';
 import { WelcomeHeader } from '@/components/dashboard/WelcomeHeader';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { QuickActions } from '@/components/dashboard/QuickActions';
-import { RecentActivity } from '@/components/dashboard/RecentActivity';
+// Removed: QuickActions, RecentActivity (not used on this page render)
 import { Navbar } from '@/components/navigation/Navbar';
 import { formatDistanceToNow } from 'date-fns';
 import { 
@@ -16,38 +15,49 @@ import {
   BarChart3, 
   DollarSign
 } from 'lucide-react';
-import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { TokenMetricsFetcher } from '@/components/TokenMetricsFetcher';
-import { useTokenMetricsData } from '@/hooks/useTokenMetricsData';
-import { PriceReloadDropdown } from '@/components/PriceReloadDropdown';
+// Removed: useUserPreferences (prefs not used here)
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { useBinancePrices } from '@/hooks/useBinancePrices';
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const { metrics, loading: metricsLoading } = usePortfolioMetrics();
   const { entries } = useCombinedEntries();
-  const navigate = useNavigate();
-  const { prefs } = useUserPreferences();
-  const [prices, setPrices] = useState<Record<string, number>>({});
+  // const navigate = useNavigate(); // not used
   const [lastPriceUpdate, setLastPriceUpdate] = useState<number | null>(null);
 
-  useEffect(() => {
-  }, [user, loading, navigate]);
+  // No navigation side-effects
 
   // Get symbols from entries
-  const watchedSymbols = [...new Set(
+  const watchedSymbols = useMemo(() => ([...new Set(
     entries
       .filter(e => e.type === 'spot' || e.type === 'wallet')
       .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
-  )];
-  const handlePriceUpdate = (newPrices: Record<string, number>) => {
-    setPrices(newPrices);
-    setLastPriceUpdate(Date.now());
-  };
+  )]), [entries]);
+  const { prices: binancePrices, loading: priceLoading, error: priceError, missingCreds, manualReload, refreshStatus } = useBinancePrices(watchedSymbols);
 
   // No automatic fetching - manual reload only
   useEffect(() => {
     // Prices will be loaded from cache or fetched manually
   }, []);
+
+  // When prices land first time, record timestamp to drive the live indicator
+  useEffect(() => {
+    if (!priceLoading && binancePrices && Object.keys(binancePrices).length > 0) {
+      setLastPriceUpdate(prev => (prev ?? Date.now()));
+    }
+  }, [priceLoading, binancePrices]);
+
+  // Ensure credentials status is rechecked after auth session is available (run when user id becomes available)
+  const refreshRef = useRef(refreshStatus);
+  useEffect(() => { refreshRef.current = refreshStatus; }, [refreshStatus]);
+  useEffect(() => {
+    if (user?.id) {
+      refreshRef.current();
+    }
+  }, [user?.id]);
 
   if (loading || metricsLoading) {
     return <PageLoading text="Loading dashboard..." />;
@@ -57,7 +67,14 @@ export default function Dashboard() {
     return <PageLoading text="Redirecting to login..." />;
   }
 
-  const recentEntries = entries.slice(0, 5);
+  // const recentEntries = entries.slice(0, 5);
+
+  // Precompute unique symbols for rendering
+  const uniqueSymbols: string[] = Array.from(new Set(
+    entries
+      .filter(e => e.type === 'spot' || e.type === 'wallet')
+      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+  ));
 
   const stats = [
     {
@@ -99,14 +116,30 @@ export default function Dashboard() {
   return (
     <>
       <Navbar />
-      <TokenMetricsFetcher symbols={watchedSymbols} onPricesUpdate={handlePriceUpdate} />
       <div className="min-h-screen p-2 sm:p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
-          {/* TokenMetrics Pricing Only */}
+          {/* Binance Pricing */}
           {/* Welcome Header - Compact on mobile */}
           <div className="fade-in">
             <WelcomeHeader />
           </div>
+          {/* Missing Binance credentials banner */}
+          {missingCreds === true && (
+            <Alert className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                Binance API credentials not set. Add them in Settings → API Key Management to enable live prices.
+              </AlertDescription>
+            </Alert>
+          )}
+          {priceError && (
+            <Alert className="bg-destructive/10 border-destructive/20">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription>
+                {priceError}
+              </AlertDescription>
+            </Alert>
+          )}
           {/* Mobile-optimized layout */}
           <div className="space-y-4 sm:space-y-6">
             {/* Stats Grid - 2x2 on mobile, responsive */}
@@ -118,13 +151,13 @@ export default function Dashboard() {
               ))}
             </div>
 
-            {/* Live Price Update Indicator - Compact */}
-            {lastPriceUpdate && (
+            {/* Live Price Update Indicator - only after we have a timestamp */}
+            {lastPriceUpdate !== null && (
               <div className="flex items-center justify-center py-1 fade-in" style={{ animationDelay: '0.5s' }}>
                 <div className="flex items-center gap-2 px-3 py-1 bg-success/10 text-success rounded-full text-xs sm:text-sm">
                   <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
                   <span className="hidden sm:inline">
-                    Prices updated {formatDistanceToNow(new Date(lastPriceUpdate), { addSuffix: true })}
+                    {`Prices updated ${formatDistanceToNow(new Date(lastPriceUpdate), { addSuffix: true })}`}
                   </span>
                   <span className="sm:hidden">
                     Prices live
@@ -140,19 +173,20 @@ export default function Dashboard() {
                   <h3 className="text-lg sm:text-xl font-semibold">Current Prices</h3>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">USD (USDT)</span>
-                    <PriceReloadDropdown 
-                      symbols={watchedSymbols}
-                      onReloadSuccess={() => setLastPriceUpdate(Date.now())}
-                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      disabled={priceLoading || missingCreds === true}
+                      onClick={async () => { await manualReload(); setLastPriceUpdate(Date.now()); }}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${priceLoading ? 'animate-spin' : ''}`} />
+                      {priceLoading ? 'Reloading...' : 'Reload Prices'}
+                    </Button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                  {Array.from(new Set(
-                    entries
-                      .filter(e => e.type === 'spot' || e.type === 'wallet')
-                      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,'') )
-                  )).map((symbol) => {
-                    const price = prices[symbol];
+                  {uniqueSymbols.map((symbol: string) => {
+                    const price = binancePrices[symbol];
                     return (
                       <div key={symbol} className="glass-card p-3 sm:p-4">
                         <div className="flex items-baseline justify-between">

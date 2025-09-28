@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
-import { useCryptoPrices } from '@/hooks/useCryptoPrices';
+import { useBinanceAnalyticsPrices } from '@/hooks/useBinanceAnalyticsPrices';
 
 export interface AssetSummary {
   asset: string;
@@ -17,7 +17,11 @@ export interface AssetSummary {
 
 export function useAssetSummaries() {
   const { entries } = useCombinedEntries();
-  const { getAssetPrice, getAssetChangePct } = useCryptoPrices();
+  const symbols = Array.from(new Set(entries
+    .filter(e => e.type === 'spot' || e.type === 'wallet')
+    .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+  ));
+  const { getAssetPrice, getAssetChangePct } = useBinanceAnalyticsPrices(symbols);
 
   const summaries = useMemo<AssetSummary[]>(() => {
     if (!entries.length) return [];

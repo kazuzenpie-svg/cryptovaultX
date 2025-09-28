@@ -15,3 +15,14 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// Debug: expose supabase to window for console inspection
+declare global {
+  interface Window { supabase?: ReturnType<typeof createClient<Database>> }
+}
+try {
+  if (typeof window !== 'undefined') {
+    // @ts-ignore - attach for debugging
+    window.supabase = supabase as any;
+  }
+} catch {}
