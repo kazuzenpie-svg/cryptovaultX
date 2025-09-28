@@ -8,22 +8,11 @@ import { DemoDataNotice } from '../components/ui/demo-notice';
 import { usePortfolioMetrics } from '../hooks/usePortfolioMetrics';
 import { useCombinedEntries } from '../hooks/useCombinedEntries';
 import { useDataVisibility } from '../hooks/useDataVisibility';
-import { useCryptoPrices } from '@/hooks/useCryptoPrices';
+import { useEnhancedCryptoPrices } from '@/hooks/useEnhancedCryptoPrices';
 import { AssetIcon } from '../components/analytics/AssetIcon';
-import { PriceReloadDropdown } from '@/components/PriceReloadDropdown';
+import { TokenMetricsWidget } from '@/components/tokenmetrics/TokenMetricsWidget';
 import { useNavigate } from 'react-router-dom';
-import {
-  PieChart,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  RefreshCw,
-  Eye,
-  DollarSign,
-  BarChart3,
-  Users,
-  Database
-} from 'lucide-react';
+import { ChartPie as PieChart, TrendingUp, TrendingDown, Wallet, RefreshCw, Eye, DollarSign, ChartBar as BarChart3, Users, Database } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Portfolio() {
@@ -31,7 +20,12 @@ export default function Portfolio() {
   const { metrics, loading } = usePortfolioMetrics();
   const { entries, loading: entriesLoading } = useCombinedEntries();
   const { dataSources, getVisibleSources } = useDataVisibility();
-  const { getAssetPrice, lastUpdated, updatePortfolioWithLivePrices } = useCryptoPrices();
+  const { 
+    getAssetPrice, 
+    lastUpdate, 
+    manualRefresh,
+    watchedSymbols 
+  } = useEnhancedCryptoPrices();
 
   const isLoading = loading || entriesLoading;
   const visibleSources = getVisibleSources();
@@ -91,15 +85,13 @@ export default function Portfolio() {
       .sort((a, b) => b.current_value_usd - a.current_value_usd);
   }, [entries, getAssetPrice, lastUpdated]);
 
-  // Get watched symbols from portfolio
-  const watchedSymbols = useMemo(() => {
-    return [...new Set(portfolio.map(item => item.asset))];
-  }, [portfolio]);
-  
-  // No automatic fetching - manual reload only
-  useEffect(() => {
-    // Prices will be loaded from cache or fetched manually
-  }, []);
+  const handlePriceRefresh = async () => {
+    try {
+      await manualRefresh();
+    } catch (error: any) {
+      console.error('Price refresh failed:', error);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -152,13 +144,14 @@ export default function Portfolio() {
               )}
             </div>
 
-            <PriceReloadDropdown 
-              symbols={watchedSymbols}
-              onReloadSuccess={() => {
-                // Refresh portfolio data after successful reload
-                // This will trigger a re-render with updated prices
-              }}
-            />
+            {watchedSymbols.length > 0 && (
+              <TokenMetricsWidget 
+                symbols={watchedSymbols}
+                title="Live Prices"
+                compact={true}
+                className="max-w-sm"
+              />
+            )}
           </div>
 
           {/* Portfolio Stats - Responsive Grid */}
@@ -369,7 +362,7 @@ export default function Portfolio() {
 
                           {asset.price_last_updated && (
                             <div className="text-xs text-muted-foreground mt-1">
-                              Updated {format(new Date(asset.price_last_updated), 'MMM dd, HH:mm')}
+                              Updated {lastUpdate ? format(lastUpdate, 'MMM dd, HH:mm') : 'Never'}
                             </div>
                           )}
                         </div>
