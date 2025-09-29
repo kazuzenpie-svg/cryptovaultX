@@ -62,7 +62,7 @@ export function PerformanceMetrics() {
       icon: metrics.weekPnL >= 0 ? TrendingUp : TrendingDown,
       color: metrics.weekPnL >= 0 ? 'text-success' : 'text-destructive',
       bgColor: metrics.weekPnL >= 0 ? 'bg-success/10' : 'bg-destructive/10',
-      description: 'Last 7 days'
+      description: 'Current week (Mon-Sun)'
     },
     {
       title: 'Month P&L',
@@ -70,7 +70,7 @@ export function PerformanceMetrics() {
       icon: metrics.monthPnL >= 0 ? TrendingUp : TrendingDown,
       color: metrics.monthPnL >= 0 ? 'text-success' : 'text-destructive',
       bgColor: metrics.monthPnL >= 0 ? 'bg-success/10' : 'bg-destructive/10',
-      description: 'Last 30 days'
+      description: 'Current month'
     },
     {
       title: 'Total Return',
@@ -133,10 +133,13 @@ export function PerformanceMetrics() {
                   </div>
                   <div className="text-right">
                     <div className="font-semibold text-success">
-                      {metrics.bestPerformer.asset}
+                      {metrics.bestPerformer!.asset}
                     </div>
                     <div className="text-sm text-success">
-                      +${metrics.bestPerformer.pnl.toLocaleString()}
+                      +{metrics.bestPerformer!.percentage.toFixed(1)}% (+${metrics.bestPerformer!.pnl.toLocaleString()})
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      ${metrics.bestPerformer!.invested.toLocaleString()} invested
                     </div>
                   </div>
                 </div>
@@ -150,10 +153,13 @@ export function PerformanceMetrics() {
                   </div>
                   <div className="text-right">
                     <div className="font-semibold text-destructive">
-                      {metrics.worstPerformer.asset}
+                      {metrics.worstPerformer!.asset}
                     </div>
                     <div className="text-sm text-destructive">
-                      ${metrics.worstPerformer.pnl.toLocaleString()}
+                      {metrics.worstPerformer!.percentage.toFixed(1)}% (${metrics.worstPerformer!.pnl.toLocaleString()})
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      ${metrics.worstPerformer!.invested.toLocaleString()} invested
                     </div>
                   </div>
                 </div>

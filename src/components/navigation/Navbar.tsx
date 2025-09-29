@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +17,6 @@ import {
   Menu,
   Home,
   BookOpen,
-  PieChart,
   BarChart3,
   Settings as SettingsIcon,
   Share2,
@@ -29,7 +29,6 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Journal', href: '/journal', icon: BookOpen },
-  { name: 'Portfolio', href: '/portfolio', icon: PieChart },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Sharing', href: '/sharing', icon: Share2 },
 ];
@@ -38,13 +37,25 @@ export function Navbar() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   // Memoize avatar initial to prevent unnecessary re-renders
   const avatarInitial = useMemo(() => user?.email?.charAt(0).toUpperCase() || 'U', [user?.email]);
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+  const handleSignOut = () => {
+    setConfirmOpen(true);
+  };
+
+  const proceedSignOut = async () => {
+    try {
+      setSigningOut(true);
+      setConfirmOpen(false);
+      await signOut();
+      navigate('/');
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const NavItem = ({ item, mobile = false }: { item: typeof navigation[0], mobile?: boolean }) => (
@@ -82,6 +93,15 @@ export function Navbar() {
 
   return (
     <>
+      {/* Global blocking overlay while signing out */}
+      {signingOut && (
+        <div className="fixed inset-0 z-[100] bg-background/70 backdrop-blur flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 p-6 rounded-xl border bg-card shadow-xl">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="text-sm text-muted-foreground">Signing out…</div>
+          </div>
+        </div>
+      )}
       {/* Desktop/Tablet Top Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:block hidden">
         <div className="container flex h-16 items-center justify-between px-4">
@@ -102,17 +122,55 @@ export function Navbar() {
             ))}
           </nav>
 
-          {/* User Menu (temporarily simplified to avoid re-render loop) */}
-          <div className="flex items-center">
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full hover-scale">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src="" alt="User" />
-                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
-                  {avatarInitial}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </div>
+          {/* User Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full hover-scale">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src="" alt="User" />
+                  <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                    {avatarInitial}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 glass-card" align="end">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">Account</p>
+                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem asChild>
+                <NavLink to="/profile" className="flex items-center gap-2 cursor-pointer">
+                  <User className="w-4 h-4" />
+                  Profile
+                </NavLink>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild>
+                <NavLink to="/settings" className="flex items-center gap-2 cursor-pointer">
+                  <SettingsIcon className="w-4 h-4" />
+                  Settings
+                </NavLink>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild>
+                <NavLink to="/about" className="flex items-center gap-2 cursor-pointer">
+                  <Info className="w-4 h-4" />
+                  About
+                </NavLink>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -129,28 +187,84 @@ export function Navbar() {
             </span>
           </NavLink>
 
-          {/* User Avatar (temporarily simplified) */}
-          <div className="flex items-center">
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src="" alt="User" />
-                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
-                  {avatarInitial}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </div>
+          {/* User Avatar Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src="" alt="User" />
+                  <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                    {avatarInitial}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 glass-card" align="end">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">Account</p>
+                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem asChild>
+                <NavLink to="/profile" className="flex items-center gap-2 cursor-pointer">
+                  <User className="w-4 h-4" />
+                  Profile
+                </NavLink>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild>
+                <NavLink to="/settings" className="flex items-center gap-2 cursor-pointer">
+                  <SettingsIcon className="w-4 h-4" />
+                  Settings
+                </NavLink>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild>
+                <NavLink to="/about" className="flex items-center gap-2 cursor-pointer">
+                  <Info className="w-4 h-4" />
+                  About
+                </NavLink>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
       {/* Mobile Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t md:hidden">
-        <div className="grid grid-cols-5 h-16 px-2">
+        <div className="grid grid-cols-4 h-16 px-2">
           {navigation.map((item) => (
             <BottomNavItem key={item.name} item={item} />
           ))}
         </div>
       </nav>
+
+      {/* Sign-out confirmation dialog */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will be logged out of CryptoVault on this device.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={proceedSignOut} disabled={signingOut} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

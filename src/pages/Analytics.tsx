@@ -47,15 +47,29 @@ export default function Analytics() {
   const ownEntries = entries.filter(e => !e.isShared);
   const sharedEntries = entries.filter(e => e.isShared);
 
-  // Calculate summary stats from entries
-  const totalInflows = entries
-    .filter(e => e.pnl > 0)
-    .reduce((sum, e) => sum + e.pnl, 0);
+  // Calculate cashflow-based totals (USD) from entries
+  // Spot: buy = outflow (cash spent), sell = inflow (cash received)
+  // Wallet: positive quantity = inflow, negative = outflow (requires price_usd)
+  const cash = entries.reduce(
+    (acc, e) => {
+      // Spot trades
+      if (e.type === 'spot' && e.quantity && e.price_usd && e.side) {
+        const gross = e.quantity * e.price_usd;
+        if (e.side === 'buy') acc.out += Math.abs(gross);
+        else if (e.side === 'sell') acc.in += Math.abs(gross);
+      }
+      // Wallet transfers (if priced in USD)
+      if (e.type === 'wallet' && e.quantity && e.price_usd) {
+        const gross = e.quantity * e.price_usd;
+        if (gross >= 0) acc.in += gross; else acc.out += Math.abs(gross);
+      }
+      return acc;
+    },
+    { in: 0, out: 0 }
+  );
 
-  const totalOutflows = entries
-    .filter(e => e.pnl < 0)
-    .reduce((sum, e) => sum + Math.abs(e.pnl), 0);
-  
+  const totalInflows = cash.in;
+  const totalOutflows = cash.out;
   const netFlow = totalInflows - totalOutflows;
 
   // Group by type for analysis from entries
@@ -64,20 +78,20 @@ export default function Analytics() {
     if (!acc[type]) {
       acc[type] = { inflow: 0, outflow: 0, count: 0 };
     }
-    
-    // Calculate inflow/outflow based on entry type and P&L
-    if (entry.pnl > 0 || (entry.type === 'spot' && entry.side === 'sell')) {
-      acc[type].inflow += Math.abs(entry.pnl);
-      if (entry.quantity && entry.price_usd && entry.side === 'sell') {
-        acc[type].inflow += entry.quantity * entry.price_usd;
-      }
-    } else if (entry.pnl < 0 || (entry.type === 'spot' && entry.side === 'buy')) {
-      acc[type].outflow += Math.abs(entry.pnl);
-      if (entry.quantity && entry.price_usd && entry.side === 'buy') {
-        acc[type].outflow += entry.quantity * entry.price_usd;
+    // Prefer explicit P&L when provided
+    const pnl = typeof entry.pnl === 'number' ? entry.pnl : 0;
+    if (pnl > 0) {
+      acc[type].inflow += pnl;
+    } else if (pnl < 0) {
+      acc[type].outflow += Math.abs(pnl);
+    } else {
+      // Fallback: if P&L is zero/undefined, approximate via cashflow for spot trades
+      if (entry.type === 'spot' && entry.quantity && entry.price_usd && entry.side) {
+        const cash = entry.quantity * entry.price_usd * (entry.side === 'sell' ? 1 : -1);
+        if (cash > 0) acc[type].inflow += cash; else if (cash < 0) acc[type].outflow += Math.abs(cash);
       }
     }
-    
+
     acc[type].count += 1;
     return acc;
   }, {} as Record<string, { inflow: number; outflow: number; count: number }>);
@@ -267,8 +281,11 @@ export default function Analytics() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary" />
-                Activity Breakdown
+                P&L Breakdown by Type
               </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Profit and loss summary grouped by entry type (positive = gains, negative = losses)
+              </p>
             </CardHeader>
             <CardContent>
               {Object.keys(typeBreakdown).length === 0 ? (
@@ -278,7 +295,7 @@ export default function Analytics() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">No data available</h3>
                   <p className="text-muted-foreground mb-6">
-                    Add some journal entries to see your activity breakdown.
+                    Add some journal entries to see your P&L breakdown.
                   </p>
                 </div>
               ) : (
@@ -288,9 +305,9 @@ export default function Analytics() {
                       <tr className="text-left text-muted-foreground">
                         <th className="py-2 pr-4">Type</th>
                         <th className="py-2 pr-4 text-right">Entries</th>
-                        <th className="py-2 pr-4 text-right">In</th>
-                        <th className="py-2 pr-4 text-right">Out</th>
-                        <th className="py-2 pr-0 text-right">Net</th>
+                        <th className="py-2 pr-4 text-right">Gains</th>
+                        <th className="py-2 pr-4 text-right">Losses</th>
+                        <th className="py-2 pr-0 text-right">Net P&L</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -318,7 +335,6 @@ export default function Analytics() {
               )}
             </CardContent>
           </Card>
-
         </div>
       </div>
     </>

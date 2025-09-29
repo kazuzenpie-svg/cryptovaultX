@@ -16,8 +16,8 @@ export interface PortfolioMetrics {
   totalTrades: number;
   winRate: number;
   avgTradeSize: number;
-  bestPerformer: { asset: string; pnl: number } | null;
-  worstPerformer: { asset: string; pnl: number } | null;
+  bestPerformer: { asset: string; pnl: number; percentage: number; invested: number } | null;
+  worstPerformer: { asset: string; pnl: number; percentage: number; invested: number } | null;
   lastUpdated: Date | null;
 }
 
@@ -124,16 +124,34 @@ export function usePortfolioMetrics() {
     const denom = Math.max(Math.abs(netInvested), totalCostBasis, 1);
     const totalPnLPercentage = denom > 0 ? (totalPnL / denom) * 100 : 0;
 
-    // Calculate time-based P&L
+    // Calculate time-based P&L using calendar periods for better consistency
     const now = new Date();
+    
+    // Calendar-based periods: current week (since Monday) and current month
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday of current week
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1); // 1st of current month
+    
+    // For day P&L, use last 24 hours
     const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Day PnL = realized entries in last 24h + approximation of unrealized using 24h price change
+    // Calculate realized P&L within each period
     const realizedDay = entries
       .filter(e => new Date(e.date) >= dayAgo)
       .reduce((sum, e) => sum + (e.pnl || 0), 0);
+    
+    const realizedWeek = entries
+      .filter(e => new Date(e.date) >= startOfWeek)
+      .reduce((sum, e) => sum + (e.pnl || 0), 0);
+    
+    const realizedMonth = entries
+      .filter(e => new Date(e.date) >= startOfMonth)
+      .reduce((sum, e) => sum + (e.pnl || 0), 0);
+
+    // Calculate unrealized P&L approximation using price changes
+    // For day: use 24h price change
     const unrealizedDay = Array.from(holding.entries())
       .reduce((sum, [asset, holding]) => {
         const price = getAssetPrice(asset) || 0;
@@ -141,15 +159,15 @@ export function usePortfolioMetrics() {
         const delta = price * (pct / 100);
         return sum + (delta * holding.quantity);
       }, 0);
-    const dayPnL = realizedDay + unrealizedDay;
 
-    // Week/Month PnL = realized within window (no historical price available for unrealized change)
-    const weekPnL = entries
-      .filter(e => new Date(e.date) >= weekAgo)
-      .reduce((sum, e) => sum + (e.pnl || 0), 0);
-    const monthPnL = entries
-      .filter(e => new Date(e.date) >= monthAgo)
-      .reduce((sum, e) => sum + (e.pnl || 0), 0);
+    // For week/month: approximate using current unrealized position (simplified)
+    // In a more sophisticated system, we'd track price changes over the period
+    const currentUnrealized = unrealizedPnL;
+    
+    // Combine realized + unrealized for each period
+    const dayPnL = realizedDay + unrealizedDay;
+    const weekPnL = realizedWeek + currentUnrealized; // Simplified - assumes unrealized position is from this week
+    const monthPnL = realizedMonth + currentUnrealized; // Simplified - assumes unrealized position is from this month
 
     // Calculate trading metrics
     const trades = entries.filter(e => e.type === 'spot' || e.type === 'futures');
@@ -164,22 +182,40 @@ export function usePortfolioMetrics() {
     }, 0);
     const avgTradeSize = trades.length > 0 ? totalTradeValue / trades.length : 0;
 
-    // Find best and worst performers by asset
-    const assetPnL = new Map<string, number>();
-    entries.forEach(entry => {
-      const current = assetPnL.get(entry.asset) || 0;
-      assetPnL.set(entry.asset, current + entry.pnl);
-    });
+    // Calculate asset performance based on current holdings (percentage returns)
+    // Only consider assets currently held with meaningful positions
+    let bestPerformer: { asset: string; pnl: number; percentage: number; invested: number } | null = null;
+    let worstPerformer: { asset: string; pnl: number; percentage: number; invested: number } | null = null;
 
-    let bestPerformer: { asset: string; pnl: number } | null = null;
-    let worstPerformer: { asset: string; pnl: number } | null = null;
+    const MIN_POSITION_SIZE = 100; // Minimum $100 invested to be considered
 
-    assetPnL.forEach((pnl, asset) => {
-      if (!bestPerformer || pnl > bestPerformer.pnl) {
-        bestPerformer = { asset, pnl };
-      }
-      if (!worstPerformer || pnl < worstPerformer.pnl) {
-        worstPerformer = { asset, pnl };
+    holding.forEach((position, asset) => {
+      if (position.quantity > 0 && position.totalCost >= MIN_POSITION_SIZE) {
+        const currentPrice = getAssetPrice(asset) || position.avgPrice;
+        const currentValue = position.quantity * currentPrice;
+        const costBasis = position.totalCost;
+        const unrealizedPnL = currentValue - costBasis;
+        const percentageReturn = costBasis > 0 ? (unrealizedPnL / costBasis) * 100 : 0;
+
+        // Check if this is the best performer
+        if (!bestPerformer || percentageReturn > bestPerformer.percentage) {
+          bestPerformer = {
+            asset,
+            pnl: unrealizedPnL,
+            percentage: percentageReturn,
+            invested: costBasis
+          };
+        }
+
+        // Check if this is the worst performer (only if negative return)
+        if (percentageReturn < 0 && (!worstPerformer || percentageReturn < worstPerformer.percentage)) {
+          worstPerformer = {
+            asset,
+            pnl: unrealizedPnL,
+            percentage: percentageReturn,
+            invested: costBasis
+          };
+        }
       }
     });
 

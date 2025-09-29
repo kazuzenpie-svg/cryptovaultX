@@ -25,6 +25,14 @@ function pngFallbackUrlFor(symbol: string) {
   return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/${sym}.png`;
 }
 
+// Attempt Binance-hosted currency logos (best-effort, not guaranteed for all symbols)
+function binanceSvgUrlFor(symbol: string) {
+  const sym = normalize(symbol).toUpperCase();
+  // Public asset path used by Binance for many currency logos
+  // If not available for a symbol, we'll fall back to other sources
+  return `https://assets.binance.com/image/currencies/logo/${sym}.svg`;
+}
+
 const CACHE_TTL = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 export function AssetIcon({ symbol, size = 24, className }: AssetIconProps) {
@@ -49,29 +57,54 @@ export function AssetIcon({ symbol, size = 24, className }: AssetIconProps) {
       return;
     }
 
-    const url = iconUrlFor(symbol);
-
-    // Try SVG first
-    fetch(url)
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Icon not found');
+    // 1) Try Binance-hosted SVG
+    const tryBinance = async () => {
+      try {
+        const res = await fetch(binanceSvgUrlFor(symbol));
+        if (!res.ok) throw new Error('Binance icon not found');
         const svg = await res.text();
-        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-        if (!didCancel) {
-          setSrc(dataUrl);
-          cacheSet(cacheKey, dataUrl, CACHE_TTL);
-        }
-      })
-      .catch(() => {
-        // Fallback order:
-        // 1) spothq PNG (since we already tried SVG)
-        // 2) CoinGecko mapping as a last resort (if it appears later)
-        const pngUrl = pngFallbackUrlFor(symbol);
-        if (!didCancel) {
-          setSrc(pngUrl);
-          cacheSet(cacheKey, pngUrl, CACHE_TTL);
-        }
-      });
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      } catch {
+        return null;
+      }
+    };
+
+    // 2) Try spothq SVG via jsdelivr
+    const trySpotHqSvg = async () => {
+      try {
+        const res = await fetch(iconUrlFor(symbol));
+        if (!res.ok) throw new Error('spothq SVG not found');
+        const svg = await res.text();
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      } catch {
+        return null;
+      }
+    };
+
+    // 3) Fallback PNG from spothq
+    const asPng = () => pngFallbackUrlFor(symbol);
+
+    (async () => {
+      const fromBinance = await tryBinance();
+      if (!didCancel && fromBinance) {
+        setSrc(fromBinance);
+        cacheSet(cacheKey, fromBinance, CACHE_TTL);
+        return;
+      }
+
+      const fromSvg = await trySpotHqSvg();
+      if (!didCancel && fromSvg) {
+        setSrc(fromSvg);
+        cacheSet(cacheKey, fromSvg, CACHE_TTL);
+        return;
+      }
+
+      const png = asPng();
+      if (!didCancel) {
+        setSrc(png);
+        cacheSet(cacheKey, png, CACHE_TTL);
+      }
+    })();
 
     return () => {
       didCancel = true;

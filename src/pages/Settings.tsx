@@ -7,7 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Navbar } from '@/components/navigation/Navbar';
 import { Settings, Shield, Bell, Palette, User, Database, Trash2, AlertTriangle, Key } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -16,6 +19,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function SettingsPage() {
+  const { user, signOut } = useAuth();
   const { profile, updateProfile } = useProfiles();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
@@ -42,6 +46,16 @@ export default function SettingsPage() {
   const [binanceHasCreds, setBinanceHasCreds] = useState<boolean | null>(null);
   const [binanceUpdatedAt, setBinanceUpdatedAt] = useState<string | null>(null);
   const [binanceSaving, setBinanceSaving] = useState(false);
+  const [binanceStatusError, setBinanceStatusError] = useState<string | null>(null);
+  const [debugRows, setDebugRows] = useState<any[] | null>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [debugErr, setDebugErr] = useState<string | null>(null);
+
+  // Password confirmation dialog state
+  const [pwdAction, setPwdAction] = useState<null | 'save' | 'delete'>(null);
+  const [pwd, setPwd] = useState('');
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -57,18 +71,79 @@ export default function SettingsPage() {
     }
   }, [notifications, compactMode, animations, mounted]);
 
-  // Load Binance creds status
+  // Helper: refresh storage status for Binance credentials
+  const refreshBinanceStatus = async () => {
+    setBinanceStatusError(null);
+    try {
+      // Prefer RPC if present
+      const rpc = await supabase.rpc('get_binance_credentials_status');
+      if (rpc.error) {
+        console.error('get_binance_credentials_status RPC error:', rpc.error);
+      }
+      if (!rpc.error && rpc.data) {
+        setBinanceHasCreds(!!rpc.data.has_credentials);
+        setBinanceUpdatedAt(rpc.data.updated_at ?? null);
+        console.debug('RPC status payload:', rpc.data);
+        return;
+      }
+    } catch (e: any) {
+      console.error('RPC refreshBinanceStatus exception:', e);
+      setBinanceStatusError(e?.message || 'RPC call failed');
+    }
+    // Fallback: direct table check (requires RLS for current user)
+    try {
+      const { data, error } = await (supabase as any)
+        .from('binance_credentials')
+        .select('updated_at')
+        .eq('user_id', user?.id ?? '')
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.error('Fallback select error:', error);
+        setBinanceStatusError(error.message);
+      }
+      if (!error && data) {
+        setBinanceHasCreds(true);
+        setBinanceUpdatedAt(data.updated_at ?? null);
+        console.debug('Fallback status payload:', data);
+      } else {
+        setBinanceHasCreds(false);
+        setBinanceUpdatedAt(null);
+      }
+    } catch (e: any) {
+      console.error('Fallback select exception:', e);
+      setBinanceHasCreds(null);
+      setBinanceUpdatedAt(null);
+      setBinanceStatusError(e?.message || 'Status query failed');
+    }
+  };
+
+  // Debug: list current user's stored API rows (never shows secrets)
+  const listMyApis = async () => {
+    if (!user?.id) return;
+    setDebugLoading(true);
+    setDebugErr(null);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('binance_credentials')
+        .select('id, user_id, updated_at, created_at, api_key')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      setDebugRows(data || []);
+    } catch (e: any) {
+      console.error('Debug listMyApis error:', e);
+      setDebugErr(e?.message || 'Query failed');
+      setDebugRows(null);
+    } finally {
+      setDebugLoading(false);
+    }
+  };
+
+  // Load Binance creds status when user context is ready/changes
   useEffect(() => {
-    (async () => {
-      try {
-        const { data, error } = await supabase.rpc('get_binance_credentials_status');
-        if (!error && data) {
-          setBinanceHasCreds(!!data.has_credentials);
-          setBinanceUpdatedAt(data.updated_at ?? null);
-        }
-      } catch {}
-    })();
-  }, []);
+    if (user?.id) refreshBinanceStatus();
+  }, [user?.id]);
 
   const clearCache = () => {
     if (window.confirm('This will clear all cached data and reload the app. Continue?')) {
@@ -83,7 +158,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveBinanceCreds = async () => {
+  // Internal implementations (called after password confirmation)
+  const doSaveBinanceCreds = async () => {
     if (!binanceApiKey.trim() || !binanceApiSecret.trim()) {
       toast({
         title: 'Missing fields',
@@ -99,16 +175,24 @@ export default function SettingsPage() {
         p_api_key: binanceApiKey.trim(),
         p_api_secret: binanceApiSecret.trim(),
       });
-      if (error) throw error;
+      if (error) {
+        console.error('set_binance_credentials RPC error:', error);
+        throw error;
+      }
+      // Optimistic UI: immediately reflect connected state
       setBinanceHasCreds(true);
       setBinanceUpdatedAt(new Date().toISOString());
-      setBinanceApiSecret(''); // never keep secret in memory longer than needed
+      await refreshBinanceStatus();
+      // Clear sensitive inputs after successful save
+      setBinanceApiKey('');
+      setBinanceApiSecret('');
       toast({
         title: 'Binance credentials saved',
         description: 'Stored securely with RLS and encryption.',
         className: 'bg-success text-success-foreground',
       });
     } catch (e: any) {
+      console.error('Save credentials exception:', e);
       toast({
         title: 'Save failed',
         description: e?.message || 'Could not save credentials.',
@@ -120,14 +204,15 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteBinanceCreds = async () => {
-    if (!window.confirm('Remove your stored Binance credentials?')) return;
+  const doDeleteBinanceCreds = async () => {
     setBinanceSaving(true);
     try {
       const { error } = await supabase.rpc('delete_binance_credentials');
-      if (error) throw error;
-      setBinanceHasCreds(false);
-      setBinanceUpdatedAt(null);
+      if (error) {
+        console.error('delete_binance_credentials RPC error:', error);
+        throw error;
+      }
+      await refreshBinanceStatus();
       setBinanceApiKey('');
       setBinanceApiSecret('');
       toast({
@@ -136,6 +221,7 @@ export default function SettingsPage() {
         className: 'bg-success text-success-foreground',
       });
     } catch (e: any) {
+      console.error('Delete credentials exception:', e);
       toast({
         title: 'Remove failed',
         description: e?.message || 'Could not remove credentials.',
@@ -144,6 +230,41 @@ export default function SettingsPage() {
       });
     } finally {
       setBinanceSaving(false);
+    }
+  };
+
+  // Public handlers now show password dialog
+  const handleSaveBinanceCreds = () => setPwdAction('save');
+  const handleDeleteBinanceCreds = () => setPwdAction('delete');
+
+  const closePwdDialog = () => {
+    setPwdAction(null);
+    setPwd('');
+    setPwdBusy(false);
+    setPwdError(null);
+  };
+
+  const confirmPwd = async () => {
+    if (!user?.email) {
+      setPwdError('Not authenticated.');
+      return;
+    }
+    if (!pwd) {
+      setPwdError('Enter your password.');
+      return;
+    }
+    setPwdBusy(true);
+    setPwdError(null);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: user.email, password: pwd });
+      if (error) throw error;
+      closePwdDialog();
+      if (pwdAction === 'save') await doSaveBinanceCreds();
+      if (pwdAction === 'delete') await doDeleteBinanceCreds();
+    } catch (e: any) {
+      setPwdError(e?.message || 'Authentication failed.');
+    } finally {
+      setPwdBusy(false);
     }
   };
 
@@ -562,16 +683,35 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             </TabsContent>
-
             <TabsContent value="api" className="fade-in" style={{ animationDelay: '0.2s' }}>
               <Card className="glass-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
                     <Key className="w-5 h-5 text-primary" />
                     API Key Management
+                    {binanceHasCreds === null && (
+                      <Badge variant="outline" className="ml-2">Checking…</Badge>
+                    )}
+                    {binanceHasCreds === true && (
+                      <Badge className="ml-2 bg-green-600 text-white">Connected</Badge>
+                    )}
+                    {binanceHasCreds === false && (
+                      <Badge variant="secondary" className="ml-2">Not set</Badge>
+                    )}
+                    {binanceSaving && (
+                      <Badge variant="outline" className="ml-2">Saving…</Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {binanceHasCreds && (
+                    <Alert className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                      <Key className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-800 dark:text-green-200">
+                        Binance API connected. Buttons switched to Update/Remove. Secrets are hidden by design.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
                     <Key className="h-4 w-4 text-blue-600" />
                     <AlertDescription className="text-blue-800 dark:text-blue-200">
@@ -606,17 +746,28 @@ export default function SettingsPage() {
                             autoComplete="off"
                           />
                         </div>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Button onClick={handleSaveBinanceCreds} disabled={binanceSaving} size="sm">Save</Button>
-                          <Button onClick={handleDeleteBinanceCreds} disabled={binanceSaving || !binanceHasCreds} size="sm" variant="outline">Remove</Button>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {binanceHasCreds ? (
+                            <>
+                              <Button onClick={handleSaveBinanceCreds} disabled={binanceSaving} size="sm">Update</Button>
+                              <Button onClick={handleDeleteBinanceCreds} disabled={binanceSaving} size="sm" variant="outline">Remove</Button>
+                              <Badge className="bg-green-600 text-white">Connected</Badge>
+                            </>
+                          ) : (
+                            <Button onClick={handleSaveBinanceCreds} disabled={binanceSaving} size="sm">Save</Button>
+                          )}
                           {binanceHasCreds !== null && (
-                            <span className="text-xs text-muted-foreground">
-                              {binanceHasCreds ? `Set${binanceUpdatedAt ? ` • updated ${new Date(binanceUpdatedAt).toLocaleString()}` : ''}` : 'Not set'}
+                            <span className="text-xs text-muted-foreground flex items-center gap-2">
+                              {binanceHasCreds ? `Stored${binanceUpdatedAt ? ` • updated ${new Date(binanceUpdatedAt).toLocaleString()}` : ''}` : 'Not set'}
+                              <button type="button" className="underline text-xs" onClick={refreshBinanceStatus}>Refresh</button>
                             </span>
+                          )}
+                          {binanceStatusError && (
+                            <span className="text-xs text-destructive">{binanceStatusError}</span>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
-                          Tip: Create a read-only API key in Binance and restrict IPs where possible.
+                          For security, stored keys are not shown. Enter new values to update. Tip: use a read‑only Binance API key and restrict IPs.
                         </p>
                       </div>
                     </div>
@@ -628,6 +779,35 @@ export default function SettingsPage() {
         </Tabs>
         </div>
       </div>
+      {/* Password Confirmation Dialog */}
+      <Dialog open={pwdAction !== null} onOpenChange={(open) => { if (!open) closePwdDialog(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm action</DialogTitle>
+            <DialogDescription>
+              Enter your account password to confirm this API key action.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="confirm-password" className="text-sm">Password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              value={pwd}
+              onChange={(e) => setPwd(e.target.value)}
+              placeholder="Your password"
+              autoComplete="current-password"
+            />
+            {pwdError && <p className="text-xs text-destructive mt-1">{pwdError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closePwdDialog} disabled={pwdBusy}>Cancel</Button>
+            <Button onClick={confirmPwd} disabled={pwdBusy}>
+              {pwdBusy ? 'Verifying…' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

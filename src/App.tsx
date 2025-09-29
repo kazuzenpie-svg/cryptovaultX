@@ -11,7 +11,6 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Journal from "./pages/Journal";
-import Portfolio from "./pages/Portfolio";
 import Analytics from "./pages/Analytics";
 import Profile from "./pages/Profile";
 import Sharing from "./pages/Sharing";
@@ -91,7 +90,6 @@ const AppContent = () => (
       <Route path="/auth" element={<Auth />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/journal" element={<Journal />} />
-      <Route path="/portfolio" element={<Portfolio />} />
       <Route path="/analytics" element={<Analytics />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/sharing" element={<Sharing />} />
