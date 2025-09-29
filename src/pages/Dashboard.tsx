@@ -25,18 +25,16 @@ export default function Dashboard() {
   const { user, loading } = useAuth();
   const { metrics, loading: metricsLoading } = usePortfolioMetrics();
   const { entries } = useCombinedEntries();
-  // const navigate = useNavigate(); // not used
   const [lastPriceUpdate, setLastPriceUpdate] = useState<number | null>(null);
-
   // No navigation side-effects
 
   // Get symbols from entries
   const watchedSymbols = useMemo(() => ([...new Set(
     entries
-      .filter(e => e.type === 'spot' || e.type === 'wallet')
-      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+      .filter((e: any) => e.type === 'spot' || e.type === 'wallet')
+      .map((e: any) => (e.symbol || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
   )]), [entries]);
-  const { prices: binancePrices, loading: priceLoading, error: priceError, missingCreds, manualReload, refreshStatus } = useBinancePrices(watchedSymbols);
+  const { prices: binancePrices, loading: priceLoading, error: priceError, missingCreds, manualReload, refreshStatus } = useBinancePrices(watchedSymbols as string[]);
 
   // No automatic fetching - manual reload only
   useEffect(() => {
@@ -72,8 +70,8 @@ export default function Dashboard() {
   // Precompute unique symbols for rendering
   const uniqueSymbols: string[] = Array.from(new Set(
     entries
-      .filter(e => e.type === 'spot' || e.type === 'wallet')
-      .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+      .filter((e: any) => e.type === 'spot' || e.type === 'wallet')
+      .map((e: any) => (e.symbol || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
   ));
 
   const stats = [

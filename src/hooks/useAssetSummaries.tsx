@@ -19,7 +19,7 @@ export function useAssetSummaries() {
   const { entries } = useCombinedEntries();
   const symbols = Array.from(new Set(entries
     .filter(e => e.type === 'spot' || e.type === 'wallet')
-    .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+    .map(e => (e.symbol || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
   ));
   const { getAssetPrice, getAssetChangePct } = useBinanceAnalyticsPrices(symbols);
 
@@ -37,13 +37,13 @@ export function useAssetSummaries() {
     for (const e of entries) {
       if (e.type !== 'spot' && e.type !== 'wallet') {
         // Only spot and wallet affect holdings; still count realized PnL
-        const current = map.get(e.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, realizedPnL: 0 };
+        const current = map.get(e.symbol || e.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, realizedPnL: 0 };
         current.realizedPnL += e.pnl || 0;
-        map.set(e.asset, current);
+        map.set(e.symbol || e.asset, current);
         continue;
       }
 
-      const current = map.get(e.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, realizedPnL: 0 };
+      const current = map.get(e.symbol || e.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, realizedPnL: 0 };
 
       if (e.type === 'spot' && e.quantity && e.price_usd) {
         const qty = e.side === 'buy' ? e.quantity : -e.quantity;
@@ -63,7 +63,7 @@ export function useAssetSummaries() {
       }
 
       current.realizedPnL += e.pnl || 0;
-      map.set(e.asset, current);
+      map.set(e.symbol || e.asset, current);
     }
 
     const list: AssetSummary[] = [];

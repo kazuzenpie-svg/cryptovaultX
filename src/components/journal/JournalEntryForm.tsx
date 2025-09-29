@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useJournalEntries, CreateJournalEntryData } from '@/hooks/useJournalEntries';
 import { usePlatforms } from '@/hooks/usePlatforms';
 import { Info } from 'lucide-react';
+import { AssetSearchInput } from '@/components/journal/AssetSearchInput';
 import { useToast } from '@/hooks/use-toast';
 
 const entrySchema = z.object({
@@ -19,6 +20,7 @@ const entrySchema = z.object({
   platform_id: z.string().optional(),
   date: z.string(),
   asset: z.string().min(1, 'Asset is required'),
+  symbol: z.string().min(1, 'Symbol is required'),
   quantity: z.number().optional(),
   price_usd: z.number().optional(),
   fees: z.number().optional(),
@@ -43,7 +45,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
   const { createEntry, loading } = useJournalEntries();
   const { platforms } = usePlatforms();
   const { toast } = useToast();
-  const [selectedType, setSelectedType] = useState<FormData['type']>(initialType);
+  const [selectedCoin, setSelectedCoin] = useState<any>(null);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<FormData>({
     resolver: zodResolver(entrySchema),
@@ -52,6 +54,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
       platform_id: initialData.platform_id || '',
       date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       asset: initialData.asset || '',
+      symbol: initialData?.symbol || '',
       quantity: initialData.quantity && initialData.quantity > 0 ? initialData.quantity : undefined,
       price_usd: initialData.price_usd && initialData.price_usd > 0 ? initialData.price_usd : undefined,
       fees: initialData.fees || 0,
@@ -66,6 +69,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
       currency: 'USD',
       is_personal: false,
       date: new Date().toISOString().split('T')[0],
+      symbol: '',
       // leave optional numeric fields undefined by default to avoid DB CHECK violations
       quantity: undefined,
       price_usd: undefined,
@@ -103,6 +107,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
     const entryData = {
       type: data.type!,
       asset: data.asset,
+      symbol: data.symbol || selectedCoin?.symbol?.toUpperCase(),
       date: data.date,
       platform_id: data.platform_id,
       // Quantity and price_usd are optional and must be > 0 if provided
@@ -318,6 +323,53 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
           </div>
 
           <div className="grid grid-cols-1 gap-4">
+            <div className="flex items-start gap-4">
+              <Label htmlFor="asset" className="w-24 text-sm font-medium text-right shrink-0 pt-2">Asset *</Label>
+              <div className="flex-1">
+                <AssetSearchInput
+                  value={watch('asset') || ''}
+                  onChange={(value) => setValue('asset', value)}
+                  onSelect={(coin) => {
+                    setSelectedCoin(coin);
+                    setValue('asset', coin.id); // Store CoinGecko ID as asset
+                    setValue('symbol', coin.symbol.toUpperCase());
+                  }}
+                  onClear={() => {
+                    setSelectedCoin(null);
+                    setValue('symbol', '');
+                  }}
+                  className="mb-2"
+                  placeholder="Search by token name (e.g., Bitcoin, Ethereum)..."
+                  required
+                />
+                {selectedCoin && (
+                  <div className="text-xs text-muted-foreground">
+                    Symbol: {selectedCoin.symbol.toUpperCase()}
+                  </div>
+                )}
+              </div>
+              {errors.asset && <p className="text-sm text-destructive ml-28">{errors.asset.message}</p>}
+            </div>
+
+            <div className="flex items-center gap-4">
+              <Label htmlFor="symbol" className="w-24 text-sm font-medium text-right shrink-0">Symbol *</Label>
+              <Input
+                id="symbol"
+                value={watch('symbol') || ''}
+                onChange={(e) => setValue('symbol', e.target.value.toUpperCase())}
+                className="flex-1"
+                placeholder="BTC, ETH, USDT..."
+                required
+              />
+              {selectedCoin && (
+                <div className="text-xs text-muted-foreground">
+                  Auto-filled from CoinGecko
+                </div>
+              )}
+            </div>
+
+            {errors.symbol && <p className="text-sm text-destructive ml-28">{errors.symbol.message}</p>}
+
             <div className="flex items-center gap-4">
               <Label htmlFor="date" className="w-24 text-sm font-medium text-right shrink-0">Date *</Label>
               <Input
@@ -327,17 +379,6 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
                 {...register('date')}
               />
               {errors.date && <p className="text-sm text-destructive ml-28">{errors.date.message}</p>}
-            </div>
-
-            <div className="flex items-center gap-4">
-              <Label htmlFor="asset" className="w-24 text-sm font-medium text-right shrink-0">Asset *</Label>
-              <Input
-                id="asset"
-                placeholder="BTC, ETH, USDT..."
-                className="flex-1"
-                {...register('asset')}
-              />
-              {errors.asset && <p className="text-sm text-destructive ml-28">{errors.asset.message}</p>}
             </div>
           </div>
 
@@ -360,7 +401,7 @@ export function JournalEntryForm({ onClose, initialType = 'spot', initialData, o
 
             <div className="flex items-center gap-4">
               <Label htmlFor="currency" className="w-24 text-sm font-medium text-right shrink-0">Currency</Label>
-              <Select 
+              <Select
                 value={watch('currency') || initialData?.currency || 'USD'}
                 onValueChange={(value) => setValue('currency', value as 'USD' | 'PHP')}
               >

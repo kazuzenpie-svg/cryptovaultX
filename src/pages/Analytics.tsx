@@ -3,7 +3,6 @@ import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { useDataVisibility } from '@/hooks/useDataVisibility';
 import { PnLCalendar } from '@/components/analytics/PnLCalendar';
 import { PerformanceMetrics } from '@/components/analytics/PerformanceMetrics';
-import { TradingHeatmap } from '@/components/analytics/TradingHeatmap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,7 +14,6 @@ import {
   TrendingDown,
   Calendar,
   DollarSign,
-  Activity,
   RefreshCw,
   ArrowUpRight,
   ArrowDownRight,
@@ -72,40 +70,6 @@ export default function Analytics() {
   const totalOutflows = cash.out;
   const netFlow = totalInflows - totalOutflows;
 
-  // Group by type for analysis from entries
-  const typeBreakdown = entries.reduce((acc, entry) => {
-    const type = entry.type;
-    if (!acc[type]) {
-      acc[type] = { inflow: 0, outflow: 0, count: 0 };
-    }
-    // Prefer explicit P&L when provided
-    const pnl = typeof entry.pnl === 'number' ? entry.pnl : 0;
-    if (pnl > 0) {
-      acc[type].inflow += pnl;
-    } else if (pnl < 0) {
-      acc[type].outflow += Math.abs(pnl);
-    } else {
-      // Fallback: if P&L is zero/undefined, approximate via cashflow for spot trades
-      if (entry.type === 'spot' && entry.quantity && entry.price_usd && entry.side) {
-        const cash = entry.quantity * entry.price_usd * (entry.side === 'sell' ? 1 : -1);
-        if (cash > 0) acc[type].inflow += cash; else if (cash < 0) acc[type].outflow += Math.abs(cash);
-      }
-    }
-
-    acc[type].count += 1;
-    return acc;
-  }, {} as Record<string, { inflow: number; outflow: number; count: number }>);
-
-  const entryTypeLabels = {
-    spot: 'Spot Trading',
-    futures: 'Futures',
-    wallet: 'Wallet',
-    dual_investment: 'Dual Investment',
-    liquidity_mining: 'Liquidity Mining',
-    liquidity_pool: 'Liquidity Pool',
-    other: 'Other'
-  };
-
   return (
     <>
       <Navbar />
@@ -148,19 +112,15 @@ export default function Analytics() {
 
           {/* Analytics Overview Tabs */}
           <Tabs defaultValue="performance" className="fade-in space-y-4">
-            <TabsList className="grid grid-cols-3">
+            <TabsList className="grid grid-cols-2">
               <TabsTrigger value="performance">Performance</TabsTrigger>
               <TabsTrigger value="calendar">Calendar</TabsTrigger>
-              <TabsTrigger value="heatmap">Heatmap</TabsTrigger>
             </TabsList>
             <TabsContent value="performance" className="pt-4">
               <PerformanceMetrics />
             </TabsContent>
             <TabsContent value="calendar" className="pt-4">
               <PnLCalendar />
-            </TabsContent>
-            <TabsContent value="heatmap" className="pt-4">
-              <TradingHeatmap />
             </TabsContent>
           </Tabs>
 
@@ -275,66 +235,6 @@ export default function Analytics() {
 
           {/* Per-Asset Summaries */}
           <AssetSummaryList />
-
-          {/* Activity Breakdown */}
-          <Card className="glass-card fade-in" style={{ animationDelay: '0.4s' }}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                P&L Breakdown by Type
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Profit and loss summary grouped by entry type (positive = gains, negative = losses)
-              </p>
-            </CardHeader>
-            <CardContent>
-              {Object.keys(typeBreakdown).length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                    <BarChart3 className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">No data available</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Add some journal entries to see your P&L breakdown.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-muted-foreground">
-                        <th className="py-2 pr-4">Type</th>
-                        <th className="py-2 pr-4 text-right">Entries</th>
-                        <th className="py-2 pr-4 text-right">Gains</th>
-                        <th className="py-2 pr-4 text-right">Losses</th>
-                        <th className="py-2 pr-0 text-right">Net P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(typeBreakdown).map(([type, data], index) => {
-                        const netAmount = data.inflow - data.outflow;
-                        const typeLabel = entryTypeLabels[type as keyof typeof entryTypeLabels] || type;
-                        const netColor = netAmount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
-                        return (
-                          <tr key={type} className="border-t">
-                            <td className="py-3 pr-4">
-                              <Badge variant="outline" className="capitalize">{typeLabel}</Badge>
-                            </td>
-                            <td className="py-3 pr-4 text-right tabular-nums">{data.count}</td>
-                            <td className="py-3 pr-4 text-right tabular-nums text-success">${data.inflow.toLocaleString()}</td>
-                            <td className="py-3 pr-4 text-right tabular-nums text-destructive">${data.outflow.toLocaleString()}</td>
-                            <td className={`py-3 pr-0 text-right tabular-nums font-medium ${netColor}`}>
-                              {netAmount >= 0 ? '+' : ''}${netAmount.toLocaleString()}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
     </>

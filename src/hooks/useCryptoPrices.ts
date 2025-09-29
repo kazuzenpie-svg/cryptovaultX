@@ -179,8 +179,8 @@ export function useCryptoPrices() {
       return await fetchSimplePrices(assets);
     },
     updatePortfolioWithLivePrices: () => {
-      // This is a placeholder - the actual implementation would be in usePortfolio
-      console.log('Updating portfolio with live prices...');
+      // This is a placeholder - portfolio functionality has been removed
+      console.log('Portfolio functionality has been removed');
     }
   };
 }

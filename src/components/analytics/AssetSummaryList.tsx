@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useAssetSummaries } from '@/hooks/useAssetSummaries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { AssetIcon } from './AssetIcon';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Eye, BarChart3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface SortState {
   key: 'asset' | 'quantity' | 'marketValue' | 'totalPnL' | 'change24hPct';
@@ -12,6 +14,7 @@ interface SortState {
 export function AssetSummaryList() {
   const { summaries } = useAssetSummaries();
   const [sort, setSort] = useState<SortState>({ key: 'marketValue', dir: 'desc' });
+  const navigate = useNavigate();
 
   const sorted = useMemo(() => {
     const arr = [...summaries];
@@ -65,6 +68,7 @@ export function AssetSummaryList() {
                 <th className="py-2 pr-4 text-right"><HeaderButton label="Value" k="marketValue" /></th>
                 <th className="py-2 pr-4 text-right"><HeaderButton label="PnL" k="totalPnL" /></th>
                 <th className="py-2 pr-0 text-right"><HeaderButton label="24h %" k="change24hPct" /></th>
+                <th className="py-2 pr-0 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -76,7 +80,7 @@ export function AssetSummaryList() {
                   <tr key={s.asset} className="border-t">
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-3">
-                        <AssetIcon symbol={s.asset} size={22} />
+                        <AssetIcon symbol={s.asset} asset={s.asset} size={22} />
                         <div className="font-medium">{s.asset}</div>
                       </div>
                     </td>
@@ -89,6 +93,16 @@ export function AssetSummaryList() {
                         {change > 0 ? <ArrowUp className="w-3 h-3" /> : change < 0 ? <ArrowDown className="w-3 h-3" /> : null}
                         {s.change24hPct != null ? `${change.toFixed(2)}%` : '-'}
                       </div>
+                    </td>
+                    <td className="py-3 pr-0 text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/analytics/token/${s.asset}`)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                      </Button>
                     </td>
                   </tr>
                 );

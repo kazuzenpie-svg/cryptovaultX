@@ -1,0 +1,18 @@
+{
+  "name": "cryptovaultx-coingecko-proxy",
+  "version": "1.0.0",
+  "description": "CoinGecko API proxy server for CryptoVaultX",
+  "main": "coingecko-proxy.js",
+  "scripts": {
+    "start": "node coingecko-proxy.js",
+    "dev": "node coingecko-proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

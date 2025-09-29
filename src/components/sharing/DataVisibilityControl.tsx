@@ -195,7 +195,7 @@ export function DataVisibilityControl() {
                 <li><strong>My Data:</strong> Your personal trading entries that you can edit</li>
                 <li><strong>Shared Data:</strong> Read-only entries shared with you by other users</li>
                 <li><strong>Individual Control:</strong> Toggle each data source independently</li>
-                <li><strong>Global Effect:</strong> Settings apply to Dashboard, Journal, Portfolio, and Analytics</li>
+                <li><strong>Global Effect:</strong> Settings apply to Dashboard, Journal, and Analytics</li>
               </ul>
             </div>
           </div>

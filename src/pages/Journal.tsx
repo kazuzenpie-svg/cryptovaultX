@@ -91,7 +91,7 @@ const Journal = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <main className="container mx-auto p-4 space-y-6">
+      <main className="container mx-auto p-3 sm:p-4 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Trading Journal</h1>
@@ -168,55 +168,56 @@ const Journal = () => {
         </Card>
 
         {/* Entries List */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {filteredEntries.length > 0 ? (
             filteredEntries.map((entry) => (
               <Card key={entry.id} className="transition-all hover:shadow-md">
-                <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="capitalize">
+                <CardContent className="p-3">
+                  <div className="space-y-2">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="capitalize text-xs">
                           {entry.type}
                         </Badge>
-                        <h3 className="font-semibold text-lg">{entry.asset}</h3>
+                        <h3 className="font-semibold text-base">{entry.asset}</h3>
                         {entry.side && (
-                          <Badge variant={entry.side === 'buy' ? 'default' : 'destructive'} className="capitalize">
+                          <Badge variant={entry.side === 'buy' ? 'default' : 'destructive'} className="capitalize text-xs">
                             {entry.side}
                           </Badge>
                         )}
                         {entry.isShared && (
-                          <Badge variant="secondary" className="flex items-center gap-1">
+                          <Badge variant="secondary" className="flex items-center gap-1 text-xs">
                             <Users className="w-3 h-3" />
                             Shared
                           </Badge>
                         )}
                         {entry.isShared && (
-                          <Badge variant="outline" className="flex items-center gap-1">
+                          <Badge variant="outline" className="flex items-center gap-1 text-xs">
                             <Eye className="w-3 h-3" />
                             Read-only
                           </Badge>
                         )}
                       </div>
                       {!entry.isShared && (
-                        <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                        <div className="flex gap-1 self-end lg:self-auto">
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleEdit(entry)}
+                            className="h-8 px-2 hover:bg-blue-50 hover:text-blue-600 transition-colors"
                             data-testid={`button-edit-${entry.id}`}
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-3 w-3" />
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-destructive hover:text-destructive"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-destructive hover:text-destructive hover:bg-red-50 transition-colors"
                                 data-testid={`button-delete-${entry.id}`}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3 w-3" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -228,7 +229,7 @@ const Journal = () => {
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
+                                <AlertDialogAction
                                   onClick={() => handleDelete(entry.id)}
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                   data-testid={`confirm-delete-${entry.id}`}
@@ -242,24 +243,24 @@ const Journal = () => {
                       )}
                     </div>
                     
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       {entry.quantity && (
-                        <div>
-                          <span className="text-muted-foreground">Quantity:</span>
-                          <div className="font-medium">{entry.quantity}</div>
+                        <div className="bg-muted/30 rounded p-2">
+                          <span className="text-muted-foreground font-medium">Qty</span>
+                          <div className="font-semibold">{entry.quantity}</div>
                         </div>
                       )}
                       {entry.price_usd && (
-                        <div>
-                          <span className="text-muted-foreground">Price:</span>
-                          <div className="font-medium">${entry.price_usd}</div>
+                        <div className="bg-muted/30 rounded p-2">
+                          <span className="text-muted-foreground font-medium">Price</span>
+                          <div className="font-semibold">${entry.price_usd}</div>
                         </div>
                       )}
                       {entry.pnl !== 0 && (
-                        <div>
-                          <span className="text-muted-foreground">P&L:</span>
-                          <div className={`font-medium ${
-                            entry.pnl > 0 ? 'text-green-600 dark:text-green-400' : 
+                        <div className="bg-muted/30 rounded p-2">
+                          <span className="text-muted-foreground font-medium">P&L</span>
+                          <div className={`font-semibold ${
+                            entry.pnl > 0 ? 'text-green-600 dark:text-green-400' :
                             entry.pnl < 0 ? 'text-red-600 dark:text-red-400' : ''
                           }`}>
                             ${entry.pnl > 0 ? '+' : ''}${entry.pnl}
@@ -267,25 +268,34 @@ const Journal = () => {
                         </div>
                       )}
                       {entry.fees > 0 && (
-                        <div>
-                          <span className="text-muted-foreground">Fees:</span>
-                          <div className="font-medium">${entry.fees}</div>
+                        <div className="bg-muted/30 rounded p-2">
+                          <span className="text-muted-foreground font-medium">Fees</span>
+                          <div className="font-semibold">${entry.fees}</div>
                         </div>
                       )}
                     </div>
                     
                     {entry.notes && (
-                      <div className="pt-2 border-t">
-                        <span className="text-muted-foreground text-sm">Notes:</span>
-                        <p className="text-sm mt-1">{entry.notes}</p>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 rounded p-2 border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-5 h-5 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 dark:text-blue-400 text-xs">💭</span>
+                          </div>
+                          <span className="text-blue-700 dark:text-blue-300 text-xs font-medium">Notes</span>
+                        </div>
+                        <p className="text-blue-800 dark:text-blue-200 text-xs leading-relaxed pl-7">{entry.notes}</p>
                       </div>
                     )}
                     
                     {entry.isShared && entry.sharer_profile && (
-                      <div className="pt-2 border-t">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Users className="w-4 h-4" />
-                          <span>Shared by: {entry.sharer_profile.username}</span>
+                      <div className="bg-purple-50 dark:bg-purple-950/20 rounded p-2 border border-purple-200 dark:border-purple-800">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 bg-purple-100 dark:bg-purple-900/50 rounded-full flex items-center justify-center">
+                            <Users className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <span className="text-purple-700 dark:text-purple-300 text-xs">
+                            Shared by: <span className="font-medium">{entry.sharer_profile.username}</span>
+                          </span>
                         </div>
                       </div>
                     )}
@@ -296,17 +306,32 @@ const Journal = () => {
           ) : (
             <Card>
               <CardContent className="p-8 text-center">
-                <p className="text-muted-foreground">
-                  {entries.length === 0 
-                    ? "No entries yet. Start by adding your first trade!" 
-                    : "No entries match your current filters."}
+                <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">📊</span>
+                </div>
+                <h3 className="text-lg font-semibold mb-2">
+                  {entries.length === 0
+                    ? "No entries yet"
+                    : "No entries match your filters"}
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  {entries.length === 0
+                    ? "Start by adding your first trade to begin tracking your portfolio!"
+                    : "Try adjusting your search terms or filters to see more entries."}
                 </p>
+                {entries.length === 0 && (
+                  <Button
+                    onClick={() => setShowAddForm(true)}
+                    className="flex items-center gap-2 mx-auto"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Your First Entry
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}
         </div>
-
-        {/* Edit Dialog */}
         <Dialog open={!!editingEntry} onOpenChange={() => setEditingEntry(null)}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>

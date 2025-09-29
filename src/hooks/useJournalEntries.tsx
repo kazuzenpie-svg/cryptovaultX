@@ -17,6 +17,7 @@ export interface CreateJournalEntryData {
   platform_id?: string;
   date: string;
   asset: string;
+  symbol?: string;
   quantity?: number;
   price_usd?: number;
   fees?: number;

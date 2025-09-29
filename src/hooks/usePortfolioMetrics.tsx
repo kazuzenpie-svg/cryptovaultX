@@ -27,7 +27,7 @@ export function usePortfolioMetrics() {
   // Compute the list of symbols we need pricing for
   const symbols = Array.from(new Set(entries
     .filter(e => e.type === 'spot' || e.type === 'wallet')
-    .map(e => (e.asset || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
+    .map(e => (e.symbol || '').toUpperCase().replace(/\/(USDT|USD)$/,''))
   ));
   const { getAssetPrice, getAssetChangePct } = useBinanceAnalyticsPrices(symbols);
   const [loading, setLoading] = useState(true);
@@ -63,7 +63,7 @@ export function usePortfolioMetrics() {
 
     entries.forEach(entry => {
       if (entry.type === 'spot' || entry.type === 'wallet') {
-        const current = holding.get(entry.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, pnl: 0 };
+        const current = holding.get(entry.symbol || entry.asset) || { quantity: 0, avgPrice: 0, totalCost: 0, pnl: 0 };
         
         if (entry.type === 'spot' && entry.quantity && entry.price_usd) {
           const quantity = entry.side === 'buy' ? entry.quantity : -entry.quantity;
@@ -86,7 +86,7 @@ export function usePortfolioMetrics() {
         }
         
         current.pnl += entry.pnl;
-        holding.set(entry.asset, current);
+        holding.set(entry.symbol || entry.asset, current);
       }
     });
 

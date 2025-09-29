@@ -16,6 +16,7 @@ type JournalEntry = Database['public']['Tables']['journal_entries']['Row'] & {
   isShared?: boolean; // Flag to identify shared vs own entries
   sourceId?: string; // ID of the data source
   grant_id?: string; // ID of the grant (for shared entries)
+  symbol?: string; // Trading symbol (e.g., BTC, ETH)
 };
 
 export function useCombinedEntries() {

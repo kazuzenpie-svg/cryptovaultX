@@ -201,6 +201,7 @@ export type Database = {
           price_usd?: number | null
           quantity?: number | null
           side?: Database["public"]["Enums"]["trade_side"] | null
+          symbol?: string | null
           type: Database["public"]["Enums"]["entry_type"]
           updated_at?: string
           user_id: string
@@ -221,6 +222,7 @@ export type Database = {
           price_usd?: number | null
           quantity?: number | null
           side?: Database["public"]["Enums"]["trade_side"] | null
+          symbol?: string | null
           type?: Database["public"]["Enums"]["entry_type"]
           updated_at?: string
           user_id?: string

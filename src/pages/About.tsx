@@ -11,7 +11,7 @@ export default function About() {
               About CryptoVaultX
             </h1>
             <p className="text-muted-foreground">
-              Your comprehensive cryptocurrency portfolio tracker
+              Your comprehensive cryptocurrency trading journal and analytics platform
             </p>
           </div>
           

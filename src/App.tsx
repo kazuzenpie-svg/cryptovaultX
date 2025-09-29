@@ -12,6 +12,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Journal from "./pages/Journal";
 import Analytics from "./pages/Analytics";
+import TokenAnalysis from "./pages/TokenAnalysis";
 import Profile from "./pages/Profile";
 import Sharing from "./pages/Sharing";
 import Settings from "./pages/Settings";
@@ -91,6 +92,7 @@ const AppContent = () => (
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/journal" element={<Journal />} />
       <Route path="/analytics" element={<Analytics />} />
+      <Route path="/analytics/token/:symbol" element={<TokenAnalysis />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/sharing" element={<Sharing />} />
       <Route path="/settings" element={<Settings />} />
