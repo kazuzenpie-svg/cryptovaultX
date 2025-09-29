@@ -10,7 +10,6 @@ import { useCombinedEntries } from '../hooks/useCombinedEntries';
 import { useDataVisibility } from '../hooks/useDataVisibility';
 import { useEnhancedCryptoPrices } from '@/hooks/useEnhancedCryptoPrices';
 import { AssetIcon } from '../components/analytics/AssetIcon';
-import { TokenMetricsWidget } from '@/components/tokenmetrics/TokenMetricsWidget';
 import { useNavigate } from 'react-router-dom';
 import { ChartPie as PieChart, TrendingUp, TrendingDown, Wallet, RefreshCw, Eye, DollarSign, ChartBar as BarChart3, Users, Database } from 'lucide-react';
 import { format } from 'date-fns';
@@ -79,11 +78,11 @@ export default function Portfolio() {
           current_price_usd: currentPrice,
           current_value_usd: currentValue,
           total_pnl: currentValue - holding.totalCost,
-          price_last_updated: lastUpdated?.toISOString() || new Date().toISOString()
+          price_last_updated: lastUpdate?.toISOString() || new Date().toISOString()
         };
       })
       .sort((a, b) => b.current_value_usd - a.current_value_usd);
-  }, [entries, getAssetPrice, lastUpdated]);
+  }, [entries, getAssetPrice, lastUpdate]);
 
   const handlePriceRefresh = async () => {
     try {
@@ -144,14 +143,6 @@ export default function Portfolio() {
               )}
             </div>
 
-            {watchedSymbols.length > 0 && (
-              <TokenMetricsWidget 
-                symbols={watchedSymbols}
-                title="Live Prices"
-                compact={true}
-                className="max-w-sm"
-              />
-            )}
           </div>
 
           {/* Portfolio Stats - Responsive Grid */}

@@ -215,7 +215,7 @@ export function useJournalEntries() {
     if (user) {
       fetchEntries();
     }
-  }, [user]);
+  }, [user?.id]);
 
   return {
     entries,

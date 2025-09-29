@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { tokenRefreshService } from "@/services/tokenRefreshService";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -17,7 +16,6 @@ import Analytics from "./pages/Analytics";
 import Profile from "./pages/Profile";
 import Sharing from "./pages/Sharing";
 import Settings from "./pages/Settings";
-import TokenMetricsTestPage from "./pages/TokenMetricsTestPage";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
@@ -99,7 +97,6 @@ const AppContent = () => (
       <Route path="/sharing" element={<Sharing />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/about" element={<About />} />
-      <Route path="/test/tokenmetrics" element={<TokenMetricsTestPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   </>

@@ -113,7 +113,7 @@ export function useSharedEntries() {
     } else {
       setSharedEntries([]);
     }
-  }, [user, grants]);
+  }, [user?.id, grants.length]);
 
   return {
     sharedEntries,

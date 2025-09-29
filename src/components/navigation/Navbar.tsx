@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,9 @@ export function Navbar() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Memoize avatar initial to prevent unnecessary re-renders
+  const avatarInitial = useMemo(() => user?.email?.charAt(0).toUpperCase() || 'U', [user?.email]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -99,56 +102,17 @@ export function Navbar() {
             ))}
           </nav>
 
-          {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full hover-scale">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src="" alt="User" />
-                  <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
-                    {user.email?.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 glass-card" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">Account</p>
-                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem asChild>
-                <NavLink to="/profile" className="flex items-center gap-2 cursor-pointer">
-                  <User className="w-4 h-4" />
-                  Profile
-                </NavLink>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild>
-                <NavLink to="/settings" className="flex items-center gap-2 cursor-pointer">
-                  <SettingsIcon className="w-4 h-4" />
-                  Settings
-                </NavLink>
-              </DropdownMenuItem>
-
-              {/* About below Settings */}
-              <DropdownMenuItem asChild>
-                <NavLink to="/about" className="flex items-center gap-2 cursor-pointer">
-                  <Info className="w-4 h-4" />
-                  About
-                </NavLink>
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* User Menu (temporarily simplified to avoid re-render loop) */}
+          <div className="flex items-center">
+            <Button variant="ghost" className="relative h-10 w-10 rounded-full hover-scale">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src="" alt="User" />
+                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                  {avatarInitial}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -165,56 +129,17 @@ export function Navbar() {
             </span>
           </NavLink>
 
-          {/* User Avatar */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src="" alt="User" />
-                  <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
-                    {user.email?.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 glass-card" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">Account</p>
-                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem asChild>
-                <NavLink to="/profile" className="flex items-center gap-2 cursor-pointer">
-                  <User className="w-4 h-4" />
-                  Profile
-                </NavLink>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild>
-                <NavLink to="/settings" className="flex items-center gap-2 cursor-pointer">
-                  <SettingsIcon className="w-4 h-4" />
-                  Settings
-                </NavLink>
-              </DropdownMenuItem>
-
-              {/* About below Settings */}
-              <DropdownMenuItem asChild>
-                <NavLink to="/about" className="flex items-center gap-2 cursor-pointer">
-                  <Info className="w-4 h-4" />
-                  About
-                </NavLink>
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* User Avatar (temporarily simplified) */}
+          <div className="flex items-center">
+            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src="" alt="User" />
+                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                  {avatarInitial}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </div>
         </div>
       </header>
 

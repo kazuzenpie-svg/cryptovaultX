@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useTokenMetricsApi } from '@/hooks/useTokenMetricsApi';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useBinancePrices } from '@/hooks/useBinancePrices';
 import { useCombinedEntries } from '@/hooks/useCombinedEntries';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 
@@ -8,48 +8,49 @@ export interface EnhancedPriceData {
   price_usd: number;
   change_24h?: number;
   last_updated: string;
-  source: 'tokenmetrics' | 'cache' | 'fallback';
+  source: 'binance' | 'cache' | 'fallback';
 }
 
 export function useEnhancedCryptoPrices() {
   const { prefs } = useUserPreferences();
   const { entries } = useCombinedEntries();
+  const watchedSymbols = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of entries) {
+      if (e.type === 'spot' || e.type === 'wallet') {
+        const sym = e.asset?.toUpperCase().replace(/\/(USDT|USD)$/,'');
+        if (sym) set.add(sym);
+      }
+    }
+    return Array.from(set);
+  }, [entries]);
+
   const {
-    prices: tmPrices,
-    loading: tmLoading,
-    error: tmError,
-    rateLimitInfo,
-    refreshPrices,
-    getPrice,
-    getTokenData
-  } = useTokenMetricsApi();
+    prices: binancePrices,
+    loading: binanceLoading,
+    error: binanceError,
+    manualReload,
+    refreshStatus
+  } = useBinancePrices(watchedSymbols);
 
   const [enhancedPrices, setEnhancedPrices] = useState<Record<string, EnhancedPriceData>>({});
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  // Extract unique symbols from entries
-  const watchedSymbols = [...new Set(
-    entries
-      .filter(e => e.type === 'spot' || e.type === 'wallet')
-      .map(e => e.asset.toUpperCase().replace(/\/(USDT|USD)$/, ''))
-      .filter(Boolean)
-  )];
-
-  // Update enhanced prices when TokenMetrics data changes
+  // Update enhanced prices when Binance data changes
   useEffect(() => {
     const enhanced: Record<string, EnhancedPriceData> = {};
-    
-    watchedSymbols.forEach(symbol => {
-      const price = getPrice(symbol);
-      const tokenData = getTokenData(symbol);
-      
+
+    // Use keys from binancePrices to avoid depending on watchedSymbols identity
+    Object.keys(binancePrices).forEach(symbol => {
+      const price = binancePrices[symbol];
+
       if (price) {
         enhanced[symbol] = {
           symbol,
           price_usd: price,
-          change_24h: tokenData?.price_change_percentage_24_h_in_currency,
+          change_24h: 0, // Binance API doesn't provide 24h change in basic endpoint
           last_updated: new Date().toISOString(),
-          source: 'tokenmetrics'
+          source: 'binance'
         };
       } else {
         // Fallback to static prices for common stablecoins
@@ -69,37 +70,31 @@ export function useEnhancedCryptoPrices() {
     if (Object.keys(enhanced).length > 0) {
       setLastUpdate(new Date());
     }
-  }, [tmPrices, watchedSymbols, getPrice, getTokenData]);
+  }, [binancePrices]);
 
   // Auto-refresh prices for watched symbols
   const autoRefreshPrices = useCallback(async () => {
-    if (watchedSymbols.length === 0 || !prefs.tokenmetrics_api_key) return;
-    
     try {
-      await refreshPrices(watchedSymbols);
+      await manualReload();
     } catch (error) {
       console.warn('Auto-refresh failed:', error);
     }
-  }, [watchedSymbols, prefs.tokenmetrics_api_key, refreshPrices]);
+  }, [manualReload]);
 
   // Manual refresh with user feedback
   const manualRefresh = useCallback(async (symbols?: string[]) => {
-    const symbolsToRefresh = symbols || watchedSymbols;
-    if (symbolsToRefresh.length === 0) return;
-
-    if (!rateLimitInfo.canMakeCall) {
-      const minutes = Math.ceil(rateLimitInfo.timeUntilNext / (1000 * 60));
-      throw new Error(`Rate limit exceeded. Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} before refreshing.`);
+    try {
+      await manualReload();
+    } catch (error) {
+      console.warn('Manual refresh failed:', error);
     }
-
-    await refreshPrices(symbolsToRefresh);
-  }, [watchedSymbols, rateLimitInfo, refreshPrices]);
+  }, [manualReload]);
 
   // Get price for a symbol with fallbacks
   const getAssetPrice = useCallback((symbol: string): number | null => {
     const normalizedSymbol = symbol.toUpperCase().replace(/\/(USDT|USD)$/, '');
     const enhanced = enhancedPrices[normalizedSymbol];
-    
+
     if (enhanced) {
       return enhanced.price_usd;
     }
@@ -127,7 +122,7 @@ export function useEnhancedCryptoPrices() {
   } => {
     const normalizedSymbol = symbol.toUpperCase().replace(/\/(USDT|USD)$/, '');
     const enhanced = enhancedPrices[normalizedSymbol];
-    
+
     if (!enhanced) {
       return { age: 0, isStale: true, source: 'none' };
     }
@@ -147,22 +142,22 @@ export function useEnhancedCryptoPrices() {
     prices: enhancedPrices,
     watchedSymbols,
     lastUpdate,
-    
+
     // State
-    loading: tmLoading,
-    error: tmError,
-    rateLimitInfo,
-    
+    loading: binanceLoading,
+    error: binanceError,
+    rateLimitInfo: { canMakeCall: true, timeUntilNext: 0 }, // Binance doesn't have rate limits in basic usage
+
     // Methods
     getAssetPrice,
     getAssetChange,
     getDataFreshness,
     manualRefresh,
     autoRefreshPrices,
-    
-    // TokenMetrics specific
-    getTokenData,
-    
+
+    // TokenMetrics specific (deprecated)
+    getTokenData: () => null, // Placeholder for compatibility
+
     // Stats
     totalPrices: Object.keys(enhancedPrices).length,
     stalePrices: Object.values(enhancedPrices).filter(p => {

@@ -16,19 +16,26 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function SettingsPage() {
-  const { user, signOut } = useAuth();
   const { profile, updateProfile } = useProfiles();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const { prefs, loading: prefsLoading, error: prefsError, save: savePrefs } = useUserPreferences();
-  const [tokenMetricsKey, setTokenMetricsKey] = useState<string>('');
-  const [notifications, setNotifications] = useState(true);
-  const [compactMode, setCompactMode] = useState(false);
-  const [animations, setAnimations] = useState(true);
+  const [notifications, setNotifications] = useState<boolean>(() => {
+    const saved = localStorage.getItem('cryptovault_notifications');
+    return saved ? JSON.parse(saved) : (prefs.notifications ?? true);
+  });
+  const [compactMode, setCompactMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('cryptovault_compact_mode');
+    return saved ? JSON.parse(saved) : (prefs.compact_mode ?? false);
+  });
+  const [animations, setAnimations] = useState<boolean>(() => {
+    const saved = localStorage.getItem('cryptovault_animations');
+    return saved ? JSON.parse(saved) : (prefs.animations ?? true);
+  });
   const [mounted, setMounted] = useState(false);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [priceAlerts, setPriceAlerts] = useState(false);
-  const [sharingNotifications, setSharingNotifications] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState<boolean>(prefs.email_notifications ?? true);
+  const [priceAlerts, setPriceAlerts] = useState<boolean>(prefs.price_alerts ?? false);
+  const [sharingNotifications, setSharingNotifications] = useState<boolean>(prefs.sharing_notifications ?? true);
   // Binance credentials UI state
   const [binanceApiKey, setBinanceApiKey] = useState('');
   const [binanceApiSecret, setBinanceApiSecret] = useState('');
@@ -36,22 +43,9 @@ export default function SettingsPage() {
   const [binanceUpdatedAt, setBinanceUpdatedAt] = useState<string | null>(null);
   const [binanceSaving, setBinanceSaving] = useState(false);
 
-  useEffect(() => {
-    setTokenMetricsKey(prefs.tokenmetrics_api_key ?? '');
-  }, [prefs.tokenmetrics_api_key]);
-
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
-    
-    // Load saved preferences
-    const savedNotifications = localStorage.getItem('cryptovault_notifications');
-    const savedCompactMode = localStorage.getItem('cryptovault_compact_mode');
-    const savedAnimations = localStorage.getItem('cryptovault_animations');
-    
-    if (savedNotifications) setNotifications(JSON.parse(savedNotifications));
-    if (savedCompactMode) setCompactMode(JSON.parse(savedCompactMode));
-    if (savedAnimations) setAnimations(JSON.parse(savedAnimations));
   }, []);
 
   // Save preferences when they change
@@ -184,29 +178,6 @@ export default function SettingsPage() {
       await signOut();
     }
   };
-
-  const handleSaveTokenMetricsKey = async () => {
-    try {
-      await savePrefs({ tokenmetrics_api_key: tokenMetricsKey.trim() || null });
-      toast({
-        title: "API Key Saved! 🔐",
-        description: "Your TokenMetrics API key has been securely stored.",
-        className: "bg-success text-success-foreground",
-      });
-    } catch (error) {
-      toast({
-        title: "Save Failed! ❌",
-        description: "Failed to save your API key. Please try again.",
-        className: "bg-destructive text-destructive-foreground",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Load TokenMetrics API key when prefs change
-  useEffect(() => {
-    setTokenMetricsKey(prefs.tokenmetrics_api_key ?? '');
-  }, [prefs.tokenmetrics_api_key]);
 
   // Don't render theme controls until mounted to prevent hydration mismatch
   if (!mounted) {
@@ -610,37 +581,6 @@ export default function SettingsPage() {
                   </Alert>
 
                   <div className="space-y-3">
-                    <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">TokenMetrics API Key</Label>
-                        <p className="text-xs text-muted-foreground mt-1 mb-3">
-                          Used for fetching real-time cryptocurrency prices
-                        </p>
-                        <div className="flex gap-2">
-                          <input
-                            type="password"
-                            className="flex-1 px-3 py-2 bg-background/60 border border-border rounded-md iPhone-input"
-                            placeholder="tm-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                            value={tokenMetricsKey}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenMetricsKey(e.target.value)}
-                          />
-                          <Button 
-                            onClick={handleSaveTokenMetricsKey}
-                            disabled={prefsLoading}
-                            size="sm"
-                          >
-                            Save
-                          </Button>
-                        </div>
-                        {prefsError && (
-                          <p className="text-xs text-destructive mt-2">{prefsError}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Note: TokenMetrics plans have monthly limits. Keys are stored per-user with Row Level Security.
-                        </p>
-                      </div>
-                    </div>
-
                     {/* Binance Credentials */}
                     <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
                       <div className="space-y-2">
@@ -685,8 +625,7 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-          </Tabs>
-
+        </Tabs>
         </div>
       </div>
     </>
